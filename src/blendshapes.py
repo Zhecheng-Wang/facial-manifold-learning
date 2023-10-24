@@ -46,10 +46,6 @@ class CollisionBlendshapeModel(BasicBlendshapeModel):
         super().__init__(V, F, blenshapes)
         E = ipctk.edges(self.F)
         self.collison_mesh = ipctk.CollisionMesh(self.V, E, self.F)
-        # is_intersecting = ipctk.has_intersections(self.collison_mesh, self.V)
-        # if is_intersecting:
-        #     raise Exception("initial mesh has intersections")
-    
     def has_intersections(self, weights=None):
         if weights is None:
             weights = self.weights
@@ -60,10 +56,13 @@ class CollisionBlendshapeModel(BasicBlendshapeModel):
 def load_blendshape_model(path):
     folder_content = os.listdir(path)
     blendshape_paths = []
+    count = 0
     for f in folder_content:
         file_name, file_ext = os.path.splitext(f)
+        print(count, file_name, file_ext)
         if file_ext == ".obj" and file_name != "Neutral":
             blendshape_paths.append(os.path.join(path, f))
+            count += 1
     N_BLENDSHAPES = len(blendshape_paths)
     print(f"Found {N_BLENDSHAPES} blendshapes.")
     neutral_path = os.path.join(path, "Neutral.obj")
