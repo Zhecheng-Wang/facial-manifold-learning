@@ -4,8 +4,6 @@ import polyscope as ps
 import polyscope.imgui as psim
 from blendshapes import *
 
-
-
 def generate_random_vector_with_cosine_limit(a, alpha):
     def generate_random_unit_vector(dim):
         # Generate a random vector with the specified number of dimensions
@@ -55,16 +53,13 @@ class ManifoldExplorer:
         self.weights = next_weights
         self.history.append(self.weights.copy())
         return self.model.eval(self.weights)
-class ManifoldExplorer_bouncing_ray(ManifoldExplorer):
+
+class BouncingRayManifoldExplorer(ManifoldExplorer):
     def __init__(self, model: CollisionBlendshapeModel, step_size=0.1):
-        self.model = model
-        self.step_size = step_size
-        self.weights = np.zeros(self.model.weights.shape)
-        self.history = []
+        super().__init__(model, step_size)
         self.current_dire = np.random.rand(self.weights.shape[0])
         self.current_dire = self.current_dire/np.linalg.norm(self.current_dire)
-    def valid_weights(self, weights):
-        return super().valid_weights(weights)
+        
     def random_step(self, user_reject):
         direction = self.current_dire
         next_weights = self.weights + direction * self.step_size
@@ -89,6 +84,7 @@ class ManifoldExplorer_bouncing_ray(ManifoldExplorer):
         self.weights = next_weights
         self.history.append(self.weights.copy())
         return self.model.eval(self.weights)
+
 manifold_explorer = None
 playing = False
 manifold_visual = None

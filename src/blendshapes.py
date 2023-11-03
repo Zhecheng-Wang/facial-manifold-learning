@@ -46,12 +46,20 @@ class CollisionBlendshapeModel(BasicBlendshapeModel):
         super().__init__(V, F, blenshapes)
         E = ipctk.edges(self.F)
         self.collison_mesh = ipctk.CollisionMesh(self.V, E, self.F)
+    
     def has_intersections(self, weights=None):
         if weights is None:
             weights = self.weights
         V = self.eval(weights)
         is_intersecting = ipctk.has_intersections(self.collison_mesh, V)
         return is_intersecting
+    
+class IntersectionMetricBlendshapeModel(BasicBlendshapeModel):
+    def __init__(self, V, F, blenshapes):
+        super().__init__(V, F, blenshapes)
+    
+    def intersection_metric(self, weights=None):
+        pass
     
 def load_blendshape_model(path):
     folder_content = os.listdir(path)
