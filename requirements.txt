@@ -2,3 +2,7 @@ numpy
 libigl
 polyscope
 ipctk
+torch
+seaborn
+tqdm
+ipykernel

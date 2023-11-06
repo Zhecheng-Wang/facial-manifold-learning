@@ -16,6 +16,7 @@ def generate_random_vector_with_cosine_limit(a, alpha):
         cosine_similarity = np.dot(a, b)
         if cosine_similarity >= alpha:
             return b
+        
 class ManifoldExplorer:
     def __init__(self, model:CollisionBlendshapeModel, step_size=0.1):
         self.model = model
@@ -53,13 +54,17 @@ class ManifoldExplorer:
         self.weights = next_weights
         self.history.append(self.weights.copy())
         return self.model.eval(self.weights)
+    
+    def reset(self):
+        self.weights = np.zeros(self.model.weights.shape)
+        self.history = []
 
 class BouncingRayManifoldExplorer(ManifoldExplorer):
     def __init__(self, model: CollisionBlendshapeModel, step_size=0.1):
         super().__init__(model, step_size)
         self.current_dire = np.random.rand(self.weights.shape[0])
         self.current_dire = self.current_dire/np.linalg.norm(self.current_dire)
-        
+
     def random_step(self, user_reject):
         direction = self.current_dire
         next_weights = self.weights + direction * self.step_size
@@ -92,12 +97,14 @@ save_path = os.path.join(os.pardir, "output", "history.npy")
 
 def draw():
     global playing
+
     if psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_Space)):
         playing = not playing
     if psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_A)):
         user_reject = True
     else:
         user_reject = False
+    
     if playing:
         V = manifold_explorer.random_step(user_reject)
         if V is None:
@@ -109,6 +116,10 @@ def draw():
             playing = False
     elif psim.Button("Play"):
         playing = True
+
+    if psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_R)) or psim.Button("Reset"):
+        playing = False
+        manifold_explorer.reset()
     
     psim.InputText("", save_path)
     psim.SameLine()
@@ -125,7 +136,6 @@ if __name__ == "__main__":
     # initialize manifold explorer
     step_size = 0.01
     manifold_explorer = ManifoldExplorer(model, step_size)   
-    # manifold_explorer = ManifoldExplorer_bouncing_ray(model, step_size)
     # initialize polyscope
     ps.set_autocenter_structures(True)
     ps.set_program_name("Manifold Explorer")
