@@ -11,7 +11,7 @@ def train(coords, labels):
                 out_features=1,\
                 num_hidden_layers=3,\
                 hidden_features=64,\
-                nonlinearity="Sine").to(device)
+                nonlinearity="ReLU").to(device)
     
     optimizer = torch.optim.Adam(model.parameters())
     

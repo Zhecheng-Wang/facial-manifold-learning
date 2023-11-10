@@ -10,16 +10,28 @@ def load_model(model_path):
                 out_features=1,\
                 num_hidden_layers=3,\
                 hidden_features=64,\
-                nonlinearity="Sine").to(device)
+                nonlinearity="ReLU").to(device)
     
     model.load_state_dict(torch.load(model_path))
 
     return model
 
-def infer(model, coords):
+def gradient(y, x, grad_outputs=None):
+    if grad_outputs is None:
+        grad_outputs = torch.ones_like(y)
+    grad = torch.autograd.grad(y, [x], grad_outputs=grad_outputs, create_graph=True)[0]
+    return grad
+
+def infer(model, coords, return_grad=False):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     N = coords.shape[0]
     coords = torch.tensor(coords).reshape(-1, 2).to(device, dtype=torch.float32)
-    with torch.inference_mode():
-        labels_pred = model(coords).squeeze()
-    return labels_pred.reshape(N, N).detach().cpu().numpy()
+    if return_grad:
+        coords = coords.requires_grad_(True)
+        value_pred = model(coords)
+        grad = gradient(value_pred, coords)
+        return value_pred.reshape(N, N).detach().cpu().numpy(), grad.reshape(N, N, 2).detach().cpu().numpy()
+    else:
+        with torch.inference_mode():
+            value_pred = model(coords).squeeze()
+        return value_pred.reshape(N, N).detach().cpu().numpy()
