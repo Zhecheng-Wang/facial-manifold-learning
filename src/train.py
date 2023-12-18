@@ -13,7 +13,7 @@ def train(coords, labels):
                 hidden_features=64,\
                 nonlinearity="ReLU").to(device)
     
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-1)
     
     loss = torch.nn.MSELoss().to(device)
 

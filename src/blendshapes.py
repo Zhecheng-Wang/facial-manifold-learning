@@ -67,12 +67,12 @@ def load_blendshape_model(path):
     count = 0
     for f in folder_content:
         file_name, file_ext = os.path.splitext(f)
-        print(count, file_name, file_ext)
+        # print(count, file_name, file_ext)
         if file_ext == ".obj" and file_name != "Neutral":
             blendshape_paths.append(os.path.join(path, f))
             count += 1
     N_BLENDSHAPES = len(blendshape_paths)
-    print(f"Found {N_BLENDSHAPES} blendshapes.")
+    # print(f"Found {N_BLENDSHAPES} blendshapes.")
     neutral_path = os.path.join(path, "Neutral.obj")
     V, F = igl.read_triangle_mesh(neutral_path)
     blendshapes = np.zeros((N_BLENDSHAPES, *V.shape))
