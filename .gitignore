@@ -11,3 +11,8 @@ experiments/
 *.obj
 *.png
 *.pdf
+*.npy
+
+# blender
+*.blend
+*.blend1
