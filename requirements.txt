@@ -1,8 +1,8 @@
 numpy
 libigl
 polyscope
-ipctk
 torch
+tensorboard
 seaborn
 tqdm
 ipykernel
