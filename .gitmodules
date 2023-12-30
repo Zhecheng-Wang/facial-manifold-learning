@@ -1,0 +1,3 @@
+[submodule "figures/BlenderToolbox"]
+	path = figures/BlenderToolbox
+	url = git@github.com:HTDerekLiu/BlenderToolbox.git

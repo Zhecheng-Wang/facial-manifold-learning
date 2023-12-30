@@ -7,3 +7,7 @@ output/
 
 # project
 report/
+experiments/
+*.obj
+*.png
+*.pdf

@@ -3,7 +3,7 @@ import numpy as np
 import igl
 import ipctk
 
-class BasicBlendshapeModel:
+class BasicBlendshapes:
     def __init__(self, V, F, blenshapes):
         # V = (# of vertices, 3)
         # F = (# of faces, 3)
@@ -11,6 +11,9 @@ class BasicBlendshapeModel:
         self.V = V
         self.F = F
         self.blendshapes = blenshapes
+        self.delta = np.zeros((self.blendshapes.shape[0], self.V.shape[0]))
+        for i in range(self.blendshapes.shape[0]):
+            self.delta[i] = np.linalg.norm(self.blendshapes[i], axis=1)
         self.weights = np.zeros(self.blendshapes.shape[0])
         self.translation = np.array([0, 0, 0])
         self.scale_factor = 1
@@ -41,7 +44,13 @@ class BasicBlendshapeModel:
     def facing_dire(self):
         return self.facing_dir
     
-class CollisionBlendshapeModel(BasicBlendshapeModel):
+    def __len__(self):
+        return self.blendshapes.shape[0]
+    
+    def __getitem__(self, idx):
+        return self.blendshapes[idx]
+    
+class CollisionBlendshapes(BasicBlendshapes):
     def __init__(self, V, F, blenshapes):
         super().__init__(V, F, blenshapes)
         E = ipctk.edges(self.F)
@@ -54,14 +63,14 @@ class CollisionBlendshapeModel(BasicBlendshapeModel):
         is_intersecting = ipctk.has_intersections(self.collison_mesh, V)
         return is_intersecting
     
-class IntersectionMetricBlendshapeModel(BasicBlendshapeModel):
+class IntersectionMetricBlendshapes(BasicBlendshapes):
     def __init__(self, V, F, blenshapes):
         super().__init__(V, F, blenshapes)
     
     def intersection_metric(self, weights=None):
         pass
     
-def load_blendshape_model(path):
+def load_blendshape(path):
     folder_content = os.listdir(path)
     blendshape_paths = []
     count = 0
@@ -79,5 +88,4 @@ def load_blendshape_model(path):
     for i in range(N_BLENDSHAPES):
         VB, _ = igl.read_triangle_mesh(blendshape_paths[i])
         blendshapes[i] = VB - V
-    model = CollisionBlendshapeModel(V, F, blendshapes)
-    return model
+    return BasicBlendshapes(V, F, blendshapes)
