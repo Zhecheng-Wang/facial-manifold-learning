@@ -49,42 +49,67 @@ class BasicBlendshapes:
     def __getitem__(self, idx):
         return self.blendshapes[idx]
     
-class CollisionBlendshapes(BasicBlendshapes):
-    def __init__(self, V, F, blenshapes):
-        super().__init__(V, F, blenshapes)
-        E = ipctk.edges(self.F)
-        self.collison_mesh = ipctk.CollisionMesh(self.V, E, self.F)
-    
-    def has_intersections(self, weights=None):
-        if weights is None:
-            weights = self.weights
-        V = self.eval(weights)
-        is_intersecting = ipctk.has_intersections(self.collison_mesh, V)
-        return is_intersecting
-    
-class IntersectionMetricBlendshapes(BasicBlendshapes):
-    def __init__(self, V, F, blenshapes):
-        super().__init__(V, F, blenshapes)
-    
-    def intersection_metric(self, weights=None):
-        pass
-    
 def load_blendshape(path):
-    folder_content = os.listdir(path)
-    blendshape_paths = []
-    count = 0
-    for f in folder_content:
-        file_name, file_ext = os.path.splitext(f)
-        # print(count, file_name, file_ext)
-        if file_ext == ".obj" and file_name != "Neutral":
-            blendshape_paths.append(os.path.join(path, f))
-            count += 1
-    N_BLENDSHAPES = len(blendshape_paths)
-    # print(f"Found {N_BLENDSHAPES} blendshapes.")
+    blendshape_names = [
+        "browDownLeft",
+        "browDownRight",
+        "browInnerUp",
+        "browOuterUpLeft",
+        "browOuterUpRight",
+        "cheekPuff",
+        "cheekSquintLeft",
+        "cheekSquintRight",
+        "eyeBlinkLeft",
+        "eyeBlinkRight",
+        "eyeLookDownLeft",
+        "eyeLookDownRight",
+        "eyeLookInLeft",
+        "eyeLookInRight",
+        "eyeLookOutLeft",
+        "eyeLookOutRight",
+        "eyeLookUpLeft",
+        "eyeLookUpRight",
+        "eyeSquintLeft",
+        "eyeSquintRight",
+        "eyeWideLeft",
+        "eyeWideRight",
+        "jawForward",
+        "jawLeft",
+        "jawOpen",
+        "jawRight",
+        "mouthClose",
+        "mouthDimpleLeft",
+        "mouthDimpleRight",
+        "mouthFrownLeft",
+        "mouthFrownRight",
+        "mouthFunnel",
+        "mouthLeft",
+        "mouthLowerDownLeft",
+        "mouthLowerDownRight",
+        "mouthPressLeft",
+        "mouthPressRight",
+        "mouthPucker",
+        "mouthRight",
+        "mouthRollLower",
+        "mouthRollUpper",
+        "mouthShrugLower",
+        "mouthShrugUpper",
+        "mouthSmileLeft",
+        "mouthSmileRight",
+        "mouthStretchLeft",
+        "mouthStretchRight",
+        "mouthUpperUpLeft",
+        "mouthUpperUpRight",
+        "noseSneerLeft",
+        "noseSneerRight"
+    ]
     neutral_path = os.path.join(path, "Neutral.obj")
     V, F = igl.read_triangle_mesh(neutral_path)
+    N_BLENDSHAPES = len(blendshape_names)
     blendshapes = np.zeros((N_BLENDSHAPES, *V.shape))
-    for i in range(N_BLENDSHAPES):
-        VB, _ = igl.read_triangle_mesh(blendshape_paths[i])
+    for i, blendshape_name in enumerate(blendshape_names):
+        blendshape_path = os.path.join(path, f"{blendshape_name}.obj")
+        assert os.path.exists(blendshape_path)
+        VB, _ = igl.read_triangle_mesh(blendshape_path)
         blendshapes[i] = VB - V
     return BasicBlendshapes(V, F, blendshapes)
