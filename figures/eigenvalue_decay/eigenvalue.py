@@ -25,7 +25,7 @@ def singular_value_decay(A):
 if __name__ == "__main__":
     # load the blendshape model
     import os
-    path = '/home/zhecheng/.local/share/fonts/LinBiolinum_R.ttf'
+    path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
     biolinum_font = fm.FontProperties(fname=path)
     sns.set(font=biolinum_font.get_name())
     PROJ_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir)

@@ -64,7 +64,7 @@ if __name__ == "__main__":
     import pandas as pd
     df = pd.DataFrame({"trials": trials, "models": events, "errors": errors})
     sns.set_theme()
-    path = '/home/zhecheng/.local/share/fonts/LinBiolinum_R.ttf'
+    path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
     biolinum_font = fm.FontProperties(fname=path)
     sns.set(font=biolinum_font.get_name())
     plt.figure(figsize=(8, 5))

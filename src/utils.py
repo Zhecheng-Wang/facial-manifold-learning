@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-path = '/home/zhecheng/.local/share/fonts/LinBiolinum_R.ttf'
+path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
 biolinum_font = fm.FontProperties(fname=path)
 sns.set(font=biolinum_font.get_name())
 sns.set_theme()
@@ -74,3 +74,6 @@ def load_config(path):
 
 def model_exists(path):
     return os.path.exists(os.path.join(path, "model.pt"))
+
+def compute_error(weights, weights_gt):
+    return np.linalg.norm(weights - weights_gt, axis=1).mean()

@@ -5,7 +5,7 @@ PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file_
 PREVIEW_FOLDER = os.path.join(PROJ_ROOT, "preview")
 from blendshapes import *
 from utils import *
-from submanifold import *
+from inference import *
 import polyscope as ps
 
 def preview(blendshape:BasicBlendshapes, weights, save_path, color=[0.8, 0.8, 0.8]):
@@ -13,9 +13,6 @@ def preview(blendshape:BasicBlendshapes, weights, save_path, color=[0.8, 0.8, 0.
     ps.register_surface_mesh("preview", V, blendshape.F, color=color, smooth_shade=True)
     ps.screenshot(save_path)
     ps.remove_all_structures()
-
-def compute_error(weights, weights_gt):
-    return np.linalg.norm(weights - weights_gt, axis=1).mean()
 
 if __name__ == "__main__":
     # load the blendshape model
@@ -27,34 +24,42 @@ if __name__ == "__main__":
     from clustering import *
     clusters = cluster_blendshapes(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
     
+    # model names
+    model_names = ["ground_truth", "corrupted", "dae_manifold"]
+    model_weights_map = {}
+    model_mesh_map = {}
+    
     # project to the manifold
-    n_frames = 100
+    n_frames = 120
     # generate # of n_sample random weights
     weights_gt = parse_BEAT_json(os.path.join(PROJ_ROOT, "data", "BEAT", "1", "1_wayne_0_9_16.json"))
     weights_gt = weights_gt[:n_frames, :]
-    print(weights_gt)
-    weights = weights_gt + np.random.normal(loc=0, scale=0.25, size=weights_gt.shape)
+    weights = weights_gt + np.random.normal(loc=0, scale=0.05, size=weights_gt.shape)
     weights = np.clip(weights, 0, 1)
+    model_weights_map["ground_truth"] = weights_gt
+    model_weights_map["corrupted"] = weights
     print("Error:", compute_error(weights, weights_gt))
     
-    dae_manifold_path = os.path.join(PROJ_ROOT, "experiments", "dae_manifold")
-    config = load_config(dae_manifold_path)
-    model = load_model(config)
-    proj_weights_dm, V_proj_dm = manifold_projection(blendshapes, weights, model)
-    print("DAE M Projection Error:", compute_error(proj_weights_dm, weights_gt))
-    
-    vae_submanifold_path = os.path.join(PROJ_ROOT, "experiments", "vae_submanifold")
-    vae_ensemble = []
-    for i, cluster in enumerate(clusters):
-        cluster_path = os.path.join(vae_submanifold_path, f"cluster_{i}")
-        if not model_exists(cluster_path):
-            print(f"Manifold model does not exist. Constructing {cluster_path}")
-            manifold_construction(cluster_path, cluster, network_type="vae")
-        config = load_config(cluster_path)
+    for model_name in model_names[2:]:
+        model_path = os.path.join(PROJ_ROOT, "experiments", model_name)
+        config = load_config(model_path)
         model = load_model(config)
-        vae_ensemble.append((model, config["clusters"]))
-    proj_weights_vsm, V_proj_vsm = submanifolds_projection(blendshapes, weights, vae_ensemble)
-    print("VAE SM Projection Error:", compute_error(proj_weights_vsm, weights_gt))
+        proj_weights = manifold_projection(blendshapes, weights, model, return_geometry=False)
+        model_weights_map[model_name] = proj_weights
+        print(f"{model_name} Error:", compute_error(proj_weights, weights_gt))
+    
+    # vae_submanifold_path = os.path.join(PROJ_ROOT, "experiments", "vae_submanifold")
+    # vae_ensemble = []
+    # for i, cluster in enumerate(clusters):
+    #     cluster_path = os.path.join(vae_submanifold_path, f"cluster_{i}")
+    #     if not model_exists(cluster_path):
+    #         print(f"Manifold model does not exist. Constructing {cluster_path}")
+    #         manifold_construction(cluster_path, cluster, network_type="vae")
+    #     config = load_config(cluster_path)
+    #     model = load_model(config)
+    #     vae_ensemble.append((model, config["clusters"]))
+    # proj_weights_vsm, V_proj_vsm = submanifolds_projection(blendshapes, weights, vae_ensemble)
+    # print("VAE SM Projection Error:", compute_error(proj_weights_vsm, weights_gt))
 
     ps.init()
     ps.set_verbosity(0)
@@ -63,23 +68,20 @@ if __name__ == "__main__":
     ps.set_view_projection_mode("orthographic")
     ps.set_autocenter_structures(False)
     ps.set_autoscale_structures(False)
+    
     n_digits = len(str(n_frames))
-    os.makedirs(os.path.join(PREVIEW_FOLDER, "ground_truth"), exist_ok=True)
-    os.makedirs(os.path.join(PREVIEW_FOLDER, "manifold"), exist_ok=True)
-    os.makedirs(os.path.join(PREVIEW_FOLDER, "submanifold"), exist_ok=True)
+    for model_name in model_names:
+        os.makedirs(os.path.join(PREVIEW_FOLDER, model_name), exist_ok=True)
     for i in range(n_frames):
-        save_path = os.path.join(PREVIEW_FOLDER, "ground_truth", f"{str(i).zfill(n_digits)}.png")
-        preview(blendshapes, weights_gt[i], save_path)
-        save_path = os.path.join(PREVIEW_FOLDER, "manifold", f"{str(i).zfill(n_digits)}.png")
-        preview(blendshapes, proj_weights_dm[i], save_path)
-        save_path = os.path.join(PREVIEW_FOLDER, "submanifold", f"{str(i).zfill(n_digits)}.png")
-        preview(blendshapes, proj_weights_vsm[i], save_path)
+        for model_name in model_names:
+            save_path = os.path.join(PREVIEW_FOLDER, model_name, f"{str(i).zfill(n_digits)}.png")
+            preview(blendshapes, model_weights_map[model_name][i], save_path)
         
     # convert image sequence to video (mp4)
     import cv2
-    for folder in ["ground_truth", "manifold", "submanifold"]:
-        image_folder = os.path.join(PREVIEW_FOLDER, folder)
-        video_name = f"{folder}.mp4"
+    for model_name in model_names:
+        image_folder = os.path.join(PREVIEW_FOLDER, model_name)
+        video_name = f"{model_name}.mp4"
         images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
         images = sorted(images, key=lambda x: int(x.split(".")[0]))
         frame = cv2.imread(os.path.join(image_folder, images[0]))
@@ -91,3 +93,4 @@ if __name__ == "__main__":
             video.write(cv2.imread(os.path.join(image_folder, image)))
         cv2.destroyAllWindows()
         video.release()
+        
