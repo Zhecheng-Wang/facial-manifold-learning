@@ -17,8 +17,7 @@ def preview(blendshape:BasicBlendshapes, weights, save_path, color=[0.8, 0.8, 0.
 if __name__ == "__main__":
     # load the blendshape model
     import os
-    BLENDSHAPES_PATH = os.path.join(PROJ_ROOT, "data", "AppleAR", "OBJs")
-    blendshapes = load_blendshape(BLENDSHAPES_PATH)
+    blendshapes = load_blendshape(model="SP")
     
     # compute clusters
     from clustering import *
@@ -32,9 +31,10 @@ if __name__ == "__main__":
     # project to the manifold
     n_frames = 120
     # generate # of n_sample random weights
-    weights_gt = parse_BEAT_json(os.path.join(PROJ_ROOT, "data", "BEAT", "1", "1_wayne_0_9_16.json"))
+    # weights_gt = parse_BEAT_json(os.path.join(PROJ_ROOT, "data", "BEAT", "1", "1_wayne_0_9_16.json"))
+    weights_gt = parse_SP_txt(os.path.join(PROJ_ROOT, "data", "SP", "dataset","03_0010_02_animation_workshop_0058_Charles.txt"))
     weights_gt = weights_gt[:n_frames, :]
-    weights = weights_gt + np.random.normal(loc=0, scale=0.05, size=weights_gt.shape)
+    weights = weights_gt + 0.05 * np.random.randn(*weights_gt.shape)
     weights = np.clip(weights, 0, 1)
     model_weights_map["ground_truth"] = weights_gt
     model_weights_map["corrupted"] = weights
@@ -68,6 +68,7 @@ if __name__ == "__main__":
     ps.set_view_projection_mode("orthographic")
     ps.set_autocenter_structures(False)
     ps.set_autoscale_structures(False)
+    ps.set_front_dir("z_front")
     
     n_digits = len(str(n_frames))
     for model_name in model_names:

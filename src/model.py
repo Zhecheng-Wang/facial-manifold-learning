@@ -53,75 +53,27 @@ class AutoEncoder(nn.Module):
         
     def forward(self, x):
         return self.decode(self.encode(x))
-    
-class DenoisingAutoEncoder(AutoEncoder):
-    def __init__(self, n_features,\
-                 hidden_features=64,\
-                 num_encoder_layers=4,\
-                 latent_dimension=5,\
-                 num_decoder_layers=4,\
-                 nonlinearity='ReLU',\
-                 noise_std=0.25):
-        super().__init__(n_features,\
-                         hidden_features,\
-                         num_encoder_layers,\
-                         latent_dimension,\
-                         num_decoder_layers,\
-                         nonlinearity)
-        self.noise_std = noise_std
-        
-    def add_noise(self, x):
-        x += torch.randn_like(x).to(x.device) * self.noise_std
-        x = torch.clip(x, 0, 1)
-        return x
-    
-    def encode(self, x):
-        x = self.add_noise(x)
-        return super().encode(x)
 
 def build_model(config:json):
     network_config = config["network"]
-    if config["type"] == "ae":
-        return AutoEncoder(n_features=network_config["n_features"],\
+    return AutoEncoder(n_features=network_config["n_features"],\
                            hidden_features=network_config["hidden_features"],\
                            num_encoder_layers=network_config["num_encoder_layers"],\
                            latent_dimension=network_config["latent_dimension"],\
                            num_decoder_layers=network_config["num_decoder_layers"],\
                            nonlinearity=network_config["nonlinearity"]), mse_loss
-    elif config["type"] == "dae":
-        return DenoisingAutoEncoder(n_features=network_config["n_features"],\
-                                    hidden_features=network_config["hidden_features"],\
-                                    num_encoder_layers=network_config["num_encoder_layers"],\
-                                    latent_dimension=network_config["latent_dimension"],\
-                                    num_decoder_layers=network_config["num_decoder_layers"],\
-                                    nonlinearity=network_config["nonlinearity"],\
-                                    noise_std=network_config["noise_std"]), mse_loss
-    else:
-        raise Exception("Invalid network type")
             
 def load_model(config:json):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
     model_path = os.path.join(config["path"], "model.pt")
-    network_type = config["type"]
     network_config = config["network"]
-    if network_type == "ae" or network_type == "dae":
-        model = AutoEncoder(n_features=network_config["n_features"],\
-                           hidden_features=network_config["hidden_features"],\
-                           num_encoder_layers=network_config["num_encoder_layers"],\
-                           latent_dimension=network_config["latent_dimension"],\
-                           num_decoder_layers=network_config["num_decoder_layers"],\
-                           nonlinearity=network_config["nonlinearity"]).to(device)
-    # elif network_type == "dae":
-    #     model = DenoisingAutoEncoder(n_features=network_config["n_features"],\
-    #                                 hidden_features=network_config["hidden_features"],\
-    #                                 num_encoder_layers=network_config["num_encoder_layers"],\
-    #                                 latent_dimension=network_config["latent_dimension"],\
-    #                                 num_decoder_layers=network_config["num_decoder_layers"],\
-    #                                 nonlinearity=network_config["nonlinearity"],\
-    #                                 noise_std=network_config["noise_std"]).to(device)
-    else:
-        raise Exception("Invalid network type")
+    model = AutoEncoder(n_features=network_config["n_features"],\
+                        hidden_features=network_config["hidden_features"],\
+                        num_encoder_layers=network_config["num_encoder_layers"],\
+                        latent_dimension=network_config["latent_dimension"],\
+                        num_decoder_layers=network_config["num_decoder_layers"],\
+                        nonlinearity=network_config["nonlinearity"]).to(device)
     
     model.load_state_dict(torch.load(model_path))
     

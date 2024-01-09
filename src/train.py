@@ -10,50 +10,54 @@ from blendshapes import *
 
 import torch.utils.tensorboard as tb
 
-def train(save_path:str, clusters=[], dataset=None, network_type="dae"):
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    
-    n_blendshapes = len(clusters) if len(clusters) > 0 else 51
-    if network_type != "ae" and network_type != "dae":
-        raise Exception("Invalid network type")
-    
+def train_manifold(save_path, blendshape, cluster=[], noise_std=0.25, dataset="BEAT"):
+    if not os.path.exists(save_path):
+        os.makedirs(save_path, exist_ok=True)
+    n_blendshapes = len(cluster) if len(cluster) > 0 else len(blendshape)
     config = {"path": save_path,\
-              "type": network_type,\
-              "clusters": list(map(int, clusters)),\
+              "cluster": list(map(int, cluster)),\
               "network": {"n_features": n_blendshapes,\
                           "hidden_features": 64,\
                           "num_encoder_layers": 4,\
                           "latent_dimension": n_blendshapes // 2,\
                           "num_decoder_layers": 4,\
-                          "nonlinearity": "ReLU",
-                          "noise_std": 0.5}}
+                          "nonlinearity": "ReLU"},\
+              "training": {"dataset": dataset,
+                           "noise_std": noise_std}}
+    json.dump(config, open(os.path.join(save_path, "config.json"), "w+"), indent=4)
+    train(config)
+
+def train(config:json):
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    
+    cluster = config["cluster"]
     
     model, loss = build_model(config)
     print(model)
     model.to(device)
     
-    json_save_path = os.path.join(save_path, "config.json")
-    json.dump(config, open(json_save_path, "w"))
+    # load dataset
+    dataset = load_dataset(dataset=config["training"]["dataset"])
     
-    # load dataset if not provided
-    if dataset is None:
-        dataset = load_dataset()
-    
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     
     # tb logger
-    writer = tb.SummaryWriter(save_path)
+    writer = tb.SummaryWriter(config["path"])
 
     model.train()
-    n_epochs = 1000
+    noise_std = config["training"]["noise_std"]
+    n_epochs = 10000
     pbar = tqdm(range(n_epochs))
     step = 0
     for epoch in pbar:
         for data in dataset:
             # if clusters are provided, train submanifold
-            if len(clusters) > 0:
-                data = data[:,clusters]
+            if len(cluster) > 0:
+                data = data[:,cluster]
             data = data.to(device)
+            if noise_std > 0.0:
+                data += torch.randn_like(data).to(device) * noise_std
+                data = torch.clip(data, 0, 1)
             
             pred = model(data)
             loss_val = loss(pred, data)
@@ -75,37 +79,25 @@ if __name__ == "__main__":
     # load the blendshape model
     import os
     PROJ_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
-    BLENDSHAPES_PATH = os.path.join(PROJ_ROOT, "data", "AppleAR", "OBJs")
-    blendshapes = load_blendshape(BLENDSHAPES_PATH)
+    blendshapes = load_blendshape(model="SP")
     
     # compute clusters
     from clustering import *
     clusters = cluster_blendshapes(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
     
     # load dataset
-    dataset = load_dataset()
+    dataset = load_dataset(dataset="SP")
     print(f"dataset # of samples: {len(dataset.dataset)}")
     
-    # manifold_path = os.path.join(PROJ_ROOT, "experiments", "manifold")
-    # if not model_exists(manifold_path):
-    #     print(f"Manifold model does not exist. Constructing {manifold_path}")
-    #     manifold_construction(manifold_path, dataset=dataset, network_type="ae")
+    manifold_path = os.path.join(PROJ_ROOT, "experiments", "manifold")
+    train_manifold(manifold_path, blendshapes, noise_std=0.0, dataset="SP")
         
     manifold_path = os.path.join(PROJ_ROOT, "experiments", "dae_manifold")
-    if not model_exists(manifold_path):
-        print(f"Manifold model does not exist. Constructing {manifold_path}")
-        manifold_construction(manifold_path, dataset=dataset, network_type="dae")
+    train_manifold(manifold_path, blendshapes, noise_std=0.05, dataset="SP")
 
     # submanifold_path = os.path.join(PROJ_ROOT, "experiments", "submanifold")
     # for i, cluster in enumerate(clusters):
     #     cluster_path = os.path.join(submanifold_path, f"cluster_{i}")
     #     if not model_exists(cluster_path):
     #         print(f"Manifold model does not exist. Constructing {cluster_path}")
-    #         manifold_construction(cluster_path, cluster, dataset=dataset, network_type="ae")
-            
-    # submanifold_path = os.path.join(PROJ_ROOT, "experiments", "dae_submanifold")
-    # for i, cluster in enumerate(clusters):
-    #     cluster_path = os.path.join(submanifold_path, f"cluster_{i}")
-    #     if not model_exists(cluster_path):
-    #         print(f"Manifold model does not exist. Constructing {cluster_path}")
-    #         manifold_construction(cluster_path, cluster, dataset=dataset, network_type="dae")
+    #         train_manifold(cluster_path, cluster, noise_std=0.25)

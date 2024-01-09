@@ -24,11 +24,6 @@ def sample_configurations(blendshapes, weights):
         V[i] = blendshapes.eval(weights[i])
     return V
 
-def manifold_construction(save_path, cluster=[], dataset=None, network_type="dae"):
-    if not os.path.exists(save_path):
-        os.makedirs(save_path, exist_ok=True)
-    train(save_path, cluster, dataset, network_type)
-
 def manifold_projection(blendshapes, weights, model, return_geometry=True):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     model = model.to(device)
