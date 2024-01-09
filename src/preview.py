@@ -24,7 +24,7 @@ if __name__ == "__main__":
     clusters = cluster_blendshapes(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
     
     # model names
-    model_names = ["ground_truth", "corrupted", "dae_manifold"]
+    model_names = ["ground_truth", "corrupted", "manifold", "dae_manifold"]
     model_weights_map = {}
     model_mesh_map = {}
     
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     # weights_gt = parse_BEAT_json(os.path.join(PROJ_ROOT, "data", "BEAT", "1", "1_wayne_0_9_16.json"))
     weights_gt = parse_SP_txt(os.path.join(PROJ_ROOT, "data", "SP", "dataset","03_0010_02_animation_workshop_0058_Charles.txt"))
     weights_gt = weights_gt[:n_frames, :]
-    weights = weights_gt + 0.05 * np.random.randn(*weights_gt.shape)
+    weights = weights_gt + 0.00 * np.random.randn(*weights_gt.shape)
     weights = np.clip(weights, 0, 1)
     model_weights_map["ground_truth"] = weights_gt
     model_weights_map["corrupted"] = weights

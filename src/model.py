@@ -73,9 +73,10 @@ def load_model(config:json):
                         num_encoder_layers=network_config["num_encoder_layers"],\
                         latent_dimension=network_config["latent_dimension"],\
                         num_decoder_layers=network_config["num_decoder_layers"],\
-                        nonlinearity=network_config["nonlinearity"]).to(device)
+                        nonlinearity=network_config["nonlinearity"])
     
-    model.load_state_dict(torch.load(model_path))
+    state_dict = torch.load(model_path, map_location=device)
+    model.load_state_dict(state_dict) 
     
     return model
 

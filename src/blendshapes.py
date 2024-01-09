@@ -6,13 +6,14 @@ from utils import *
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
 class BasicBlendshapes:
-    def __init__(self, V, F, blenshapes):
+    def __init__(self, V, F, blenshapes, names):
         # V = (# of vertices, 3)
         # F = (# of faces, 3)
         # blenshapes = (# of blendshapes, # of vertices, 3)
         self.V = V
         self.F = F
         self.blendshapes = blenshapes
+        self.names = names
         self.delta = np.zeros((self.blendshapes.shape[0], self.V.shape[0]))
         for i in range(self.blendshapes.shape[0]):
             self.delta[i] = np.linalg.norm(self.blendshapes[i], axis=1)
@@ -124,15 +125,17 @@ def load_ARKit_blendshape():
         assert os.path.exists(blendshape_path)
         VB, _ = igl.read_triangle_mesh(blendshape_path)
         blendshapes[i] = VB - V
-    return BasicBlendshapes(V, F, blendshapes)
+    return BasicBlendshapes(V, F, blendshapes, blendshape_names)
 
 def load_SP_blendshape():
     path = os.path.join(PROJ_ROOT, "data", "SP", "blendshapes")
     n_blendshapes = len(SP_BLENDSHAPE_MAPPING)
     V, F = igl.read_triangle_mesh(os.path.join(path, "neutral.obj"))
     blendshapes = np.zeros((n_blendshapes, *V.shape))
+    names = []
     for i, (_, file_name) in enumerate(SP_BLENDSHAPE_MAPPING):
         file_path = os.path.join(path, file_name)
         VB, _ = igl.read_triangle_mesh(file_path)
         blendshapes[i] = VB - V
-    return BasicBlendshapes(V, F, blendshapes)
+        names.append(file_name.split(".")[0])
+    return BasicBlendshapes(V, F, blendshapes, names)
