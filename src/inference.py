@@ -12,8 +12,12 @@ def infer(model, x):
         x = torch.tensor(x).to(device, dtype=torch.float32)
         y = model(x)
         if isinstance(y, tuple):
-            y = y[0]
-        y = y.detach().cpu().numpy()
+            y = list(y)
+            for i in range(len(y)):
+                y[i] = y[i].detach().cpu().numpy()
+            y = tuple(y)
+        else:
+            y = y.detach().cpu().numpy()
     return y
 
 def sample_configurations(blendshapes, weights):
@@ -24,52 +28,17 @@ def sample_configurations(blendshapes, weights):
         V[i] = blendshapes.eval(weights[i])
     return V
 
-def manifold_projection(blendshapes, weights, model, return_geometry=True):
+def projection(weights, model, alpha=0.0):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     model = model.to(device)
     
-    n_samples = weights.shape[0]
-    
+    if alpha < 0 or alpha > 1:
+        raise ValueError("alpha must be in the range of [0, 1]")
+
     # project to the manifold
     proj_weights = infer(model, weights)
     
-    if not return_geometry:
-        return proj_weights
+    if isinstance(proj_weights, tuple):
+        proj_weights = (1-alpha) * proj_weights[0] + alpha * proj_weights[1]
     
-    # geometry of the blendshapes
-    V_proj = np.zeros((n_samples, *blendshapes.V.shape))
-    for i in range(n_samples):
-        V_proj[i] = blendshapes.eval(proj_weights[i])
-    
-    return proj_weights, V_proj
-
-def submanifolds_construction(save_path, clusters):
-    if not os.path.exists(save_path):
-        os.makedirs(save_path, exist_ok=True)
-    dataset = load_dataset()
-    for i, cluster in enumerate(clusters):
-        cluster_save_path = os.path.join(save_path, f"cluster_{i}")
-        if not os.path.exists(cluster_save_path):
-            os.makedirs(cluster_save_path, exist_ok=True)
-        train(cluster_save_path, cluster, dataset)
-
-def submanifolds_projection(blendshapes, weights, ensemble, return_geometry=True):
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    
-    n_samples = weights.shape[0]
-    
-    # project to the submanifold
-    proj_weights = np.zeros((n_samples, len(blendshapes)))
-    for i, (model, cluster) in enumerate(ensemble):
-        model = model.to(device)
-        proj_weights[:,cluster] = infer(model, weights[:,cluster])
-        
-    if not return_geometry:
-        return proj_weights
-    
-    # geometry of the blendshapes
-    V_proj = np.zeros((n_samples, *blendshapes.V.shape))
-    for i in range(n_samples):
-        V_proj[i] = blendshapes.eval(proj_weights[i])
-    
-    return proj_weights, V_proj
+    return proj_weights

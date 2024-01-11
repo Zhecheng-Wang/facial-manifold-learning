@@ -1,25 +1,24 @@
-import math
 import json
-import numpy as np
 import torch
-from tqdm import tqdm
 from model import *
 from utils import *
 from inference import *
 from blendshapes import *
 
-import torch.utils.tensorboard as tb
-
-def train_manifold(save_path, blendshape, cluster=[], noise_std=0.25, dataset="BEAT"):
+def train_manifold(save_path, blendshape, clusters=[], noise_std=0.05, dataset="BEAT"):
     if not os.path.exists(save_path):
         os.makedirs(save_path, exist_ok=True)
-    n_blendshapes = len(cluster) if len(cluster) > 0 else len(blendshape)
+    n_blendshapes = len(blendshape)
+    latent_dimension = n_blendshapes // 2
+    if latent_dimension <= 0:
+        latent_dimension = 1
     config = {"path": save_path,\
-              "cluster": list(map(int, cluster)),\
+              "type": "ae" if len(clusters) == 0 else "hae",\
+              "clusters": [list(map(int, cluster)) for cluster in clusters],\
               "network": {"n_features": n_blendshapes,\
                           "hidden_features": 64,\
                           "num_encoder_layers": 4,\
-                          "latent_dimension": n_blendshapes // 2,\
+                          "latent_dimension": latent_dimension,\
                           "num_decoder_layers": 4,\
                           "nonlinearity": "ReLU"},\
               "training": {"dataset": dataset,
@@ -29,9 +28,7 @@ def train_manifold(save_path, blendshape, cluster=[], noise_std=0.25, dataset="B
 
 def train(config:json):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    
-    cluster = config["cluster"]
-    
+        
     model, loss = build_model(config)
     print(model)
     model.to(device)
@@ -42,18 +39,17 @@ def train(config:json):
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     
     # tb logger
+    import torch.utils.tensorboard as tb
     writer = tb.SummaryWriter(config["path"])
 
     model.train()
     noise_std = config["training"]["noise_std"]
     n_epochs = 10000
+    from tqdm import tqdm
     pbar = tqdm(range(n_epochs))
     step = 0
     for epoch in pbar:
         for data in dataset:
-            # if clusters are provided, train submanifold
-            if len(cluster) > 0:
-                data = data[:,cluster]
             data = data.to(device)
             if noise_std > 0.0:
                 data += torch.randn_like(data).to(device) * noise_std
@@ -89,15 +85,11 @@ if __name__ == "__main__":
     dataset = load_dataset(dataset="SP")
     print(f"dataset # of samples: {len(dataset.dataset)}")
     
-    manifold_path = os.path.join(PROJ_ROOT, "experiments", "manifold")
-    train_manifold(manifold_path, blendshapes, noise_std=0.0, dataset="SP")
+    # manifold_path = os.path.join(PROJ_ROOT, "experiments", "manifold")
+    # train_manifold(manifold_path, blendshapes, noise_std=0.0, dataset="SP")
         
-    manifold_path = os.path.join(PROJ_ROOT, "experiments", "dae_manifold")
-    train_manifold(manifold_path, blendshapes, noise_std=0.05, dataset="SP")
+    # manifold_path = os.path.join(PROJ_ROOT, "experiments", "dae_manifold")
+    # train_manifold(manifold_path, blendshapes, noise_std=0.05, dataset="SP")
 
-    # submanifold_path = os.path.join(PROJ_ROOT, "experiments", "submanifold")
-    # for i, cluster in enumerate(clusters):
-    #     cluster_path = os.path.join(submanifold_path, f"cluster_{i}")
-    #     if not model_exists(cluster_path):
-    #         print(f"Manifold model does not exist. Constructing {cluster_path}")
-    #         train_manifold(cluster_path, cluster, noise_std=0.25)
+    manifold_path = os.path.join(PROJ_ROOT, "experiments", "hae")
+    train_manifold(manifold_path, blendshapes, clusters, noise_std=0.05, dataset="SP")

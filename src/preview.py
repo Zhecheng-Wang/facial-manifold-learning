@@ -24,17 +24,15 @@ if __name__ == "__main__":
     clusters = cluster_blendshapes(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
     
     # model names
-    model_names = ["ground_truth", "corrupted", "manifold", "dae_manifold"]
+    model_names = ["ground_truth", "corrupted", "dae", "hae"]
     model_weights_map = {}
     model_mesh_map = {}
     
     # project to the manifold
     n_frames = 120
-    # generate # of n_sample random weights
-    # weights_gt = parse_BEAT_json(os.path.join(PROJ_ROOT, "data", "BEAT", "1", "1_wayne_0_9_16.json"))
-    weights_gt = parse_SP_txt(os.path.join(PROJ_ROOT, "data", "SP", "dataset","03_0010_02_animation_workshop_0058_Charles.txt"))
+    weights_gt = parse_SP_txt(os.path.join(PROJ_ROOT, "data", "SP", "dataset","08_0050_02_animation_workshop_0025_Charles.txt"))
     weights_gt = weights_gt[:n_frames, :]
-    weights = weights_gt + 0.00 * np.random.randn(*weights_gt.shape)
+    weights = weights_gt + 0.05 * np.random.randn(*weights_gt.shape)
     weights = np.clip(weights, 0, 1)
     model_weights_map["ground_truth"] = weights_gt
     model_weights_map["corrupted"] = weights
@@ -44,22 +42,13 @@ if __name__ == "__main__":
         model_path = os.path.join(PROJ_ROOT, "experiments", model_name)
         config = load_config(model_path)
         model = load_model(config)
-        proj_weights = manifold_projection(blendshapes, weights, model, return_geometry=False)
+        proj_weights = projection(weights, model, alpha=0.0)
         model_weights_map[model_name] = proj_weights
         print(f"{model_name} Error:", compute_error(proj_weights, weights_gt))
     
-    # vae_submanifold_path = os.path.join(PROJ_ROOT, "experiments", "vae_submanifold")
-    # vae_ensemble = []
-    # for i, cluster in enumerate(clusters):
-    #     cluster_path = os.path.join(vae_submanifold_path, f"cluster_{i}")
-    #     if not model_exists(cluster_path):
-    #         print(f"Manifold model does not exist. Constructing {cluster_path}")
-    #         manifold_construction(cluster_path, cluster, network_type="vae")
-    #     config = load_config(cluster_path)
-    #     model = load_model(config)
-    #     vae_ensemble.append((model, config["clusters"]))
-    # proj_weights_vsm, V_proj_vsm = submanifolds_projection(blendshapes, weights, vae_ensemble)
-    # print("VAE SM Projection Error:", compute_error(proj_weights_vsm, weights_gt))
+    # save model weights    
+    for model_name in model_names:
+        np.save(os.path.join(PREVIEW_FOLDER, f"{model_name}.npy"), model_weights_map[model_name])
 
     ps.init()
     ps.set_verbosity(0)
@@ -79,19 +68,19 @@ if __name__ == "__main__":
             preview(blendshapes, model_weights_map[model_name][i], save_path)
         
     # convert image sequence to video (mp4)
-    import cv2
-    for model_name in model_names:
-        image_folder = os.path.join(PREVIEW_FOLDER, model_name)
-        video_name = f"{model_name}.mp4"
-        images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
-        images = sorted(images, key=lambda x: int(x.split(".")[0]))
-        frame = cv2.imread(os.path.join(image_folder, images[0]))
-        height, width, layers = frame.shape
-        # write mp4
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        video = cv2.VideoWriter(os.path.join(PREVIEW_FOLDER, video_name), fourcc, 30, (width,height))
-        for image in images:
-            video.write(cv2.imread(os.path.join(image_folder, image)))
-        cv2.destroyAllWindows()
-        video.release()
+    # import cv2
+    # for model_name in model_names:
+    #     image_folder = os.path.join(PREVIEW_FOLDER, model_name)
+    #     video_name = f"{model_name}.mp4"
+    #     images = [img for img in os.listdir(image_folder) if img.endswith(".png")]
+    #     images = sorted(images, key=lambda x: int(x.split(".")[0]))
+    #     frame = cv2.imread(os.path.join(image_folder, images[0]))
+    #     height, width, layers = frame.shape
+    #     # write mp4
+    #     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    #     video = cv2.VideoWriter(os.path.join(PREVIEW_FOLDER, video_name), fourcc, 30, (width,height))
+    #     for image in images:
+    #         video.write(cv2.imread(os.path.join(image_folder, image)))
+    #     cv2.destroyAllWindows()
+    #     video.release()
         
