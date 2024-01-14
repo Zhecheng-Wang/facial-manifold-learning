@@ -125,6 +125,14 @@ def parse_SP_txt(txt_path):
     data = df.to_numpy()
     return data
 
+def detect_keyframes(data, threshold=0.5):
+    # detect keyframes
+    keyframes = []
+    for i in range(data.shape[0]-1):
+        if np.linalg.norm(data[i+1] - data[i]) > threshold:
+            keyframes.append(i)
+    return keyframes
+
 def parse_SP_dataset(dataset_path):
     bin_dataset_path = os.path.join(dataset_path, "data.npy")
     if not os.path.exists(bin_dataset_path):
@@ -148,6 +156,20 @@ def parse_SP_dataset(dataset_path):
         data = np.load(bin_dataset_path)
     return data
 
+class SPKeyframeDataset(Dataset):
+    def __init__(self):
+        dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
+        self.data = parse_SP_dataset(dataset_path)
+        self.keyframes = detect_keyframes(self.data)
+        self.n_frames = len(self.keyframes)
+        self.data = torch.from_numpy(self.data).to(torch.float32)
+    
+    def __len__(self):
+        return self.n_frames
+    
+    def __getitem__(self, idx):
+        return self.data[self.keyframes[idx]]
+
 class SPDataset(Dataset):
     def __init__(self):
         dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
@@ -160,12 +182,37 @@ class SPDataset(Dataset):
     
     def __getitem__(self, idx):
         return self.data[idx]
+    
+class SingleActivationDataset(Dataset):
+    def __init__(self, n_blendshapes):
+        self.data = torch.zeros((n_blendshapes+1, n_blendshapes))
+        for i in range(n_blendshapes):
+            self.data[i, i] = 1.0
+        self.n_frames = self.data.shape[0]
+    
+    def __len__(self):
+        return self.n_frames
+    
+    def __getitem__(self, idx):
+        return self.data[idx]
 
-def load_dataset(batch_size=32, dataset="BEAT"):
-    if dataset == "BEAT":
+def load_dataset(batch_size=32, dataset="BEAT", augment=False):
+    dataset_name = dataset
+    from torch.utils.data import ConcatDataset
+    if dataset_name == "BEAT":
         dataset = BEATDataset()
-    elif dataset == "SP":
+    elif dataset_name == "SP":
         dataset = SPDataset()
+    elif dataset_name == "SPKeyframe":
+        dataset = SPKeyframeDataset()
+    else:
+        raise NotImplementedError
+    print(f"{dataset_name} dataset size: {len(dataset)}")
+    if augment:
+        n_blendshapes = dataset.data.shape[1]
+        augment_dataset = SingleActivationDataset(n_blendshapes)
+        print(f"Augment dataset size: {len(augment_dataset)}")
+        dataset = ConcatDataset([dataset, augment_dataset])
     return DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
 def random_sample(dataset, n_samples):

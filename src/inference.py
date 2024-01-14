@@ -10,14 +10,8 @@ def infer(model, x):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     with torch.inference_mode():
         x = torch.tensor(x).to(device, dtype=torch.float32)
-        y = model(x)
-        if isinstance(y, tuple):
-            y = list(y)
-            for i in range(len(y)):
-                y[i] = y[i].detach().cpu().numpy()
-            y = tuple(y)
-        else:
-            y = y.detach().cpu().numpy()
+        y = model.infer(x)
+        y = y.detach().cpu().numpy()
     return y
 
 def sample_configurations(blendshapes, weights):
@@ -28,17 +22,11 @@ def sample_configurations(blendshapes, weights):
         V[i] = blendshapes.eval(weights[i])
     return V
 
-def projection(weights, model, alpha=0.0):
+def projection(weights, model):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     model = model.to(device)
-    
-    if alpha < 0 or alpha > 1:
-        raise ValueError("alpha must be in the range of [0, 1]")
 
     # project to the manifold
     proj_weights = infer(model, weights)
-    
-    if isinstance(proj_weights, tuple):
-        proj_weights = (1-alpha) * proj_weights[0] + alpha * proj_weights[1]
     
     return proj_weights

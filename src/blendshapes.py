@@ -11,6 +11,7 @@ class BasicBlendshapes:
         # F = (# of faces, 3)
         # blenshapes = (# of blendshapes, # of vertices, 3)
         self.V = V
+        self.V -= np.mean(self.V, axis=0)
         self.F = F
         self.blendshapes = blenshapes
         self.names = names
