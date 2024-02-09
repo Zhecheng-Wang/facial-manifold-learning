@@ -25,7 +25,6 @@ def sample_configurations(blendshapes, weights):
 def projection(weights, model):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     model = model.to(device)
-
     # project to the manifold
     proj_weights = infer(model, weights)
     

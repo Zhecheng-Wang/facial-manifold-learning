@@ -15,6 +15,8 @@ blendshapes = load_blendshape(model="SP")
 weights = np.zeros(len(blendshapes))
 local_proj_weights = projection(np.zeros(len(blendshapes)), model)
 global_proj_weights = projection(np.zeros(len(blendshapes)), model)
+# used to keep a history of control
+raw_weights = np.zeros(len(blendshapes))
 
 # similarity = compute_ruzicka_similarity(blendshapes)
 similarity = compute_jaccard_similarity(blendshapes)
@@ -25,7 +27,6 @@ selection_threshold = 0.5
 contextual_weight = 1.0
 
 changed_index = 0
-
 weights_history = []
 
 def update_mesh():
@@ -37,19 +38,23 @@ def update_mesh():
     # SM1.update_vertex_positions(V1)
 
 def gui():
-    global weights, local_proj_weights, global_proj_weights, blendshapes, \
-        selection_threshold, contextual_weight, changed_index, weights_history
+    global config, weights, local_proj_weights, global_proj_weights, blendshapes, \
+        selection_threshold, contextual_weight, changed_index, weights_history, raw_weights
     # save snapshot
     if psim.Button("snapshot") or (psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_Space))):
         weights_history.append(weights.copy())
         print(f"snapshot saved: {len(weights_history)}")
     psim.SameLine()
-    # undo
     if psim.Button("undo") or (psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_Backspace))):
         if len(weights_history) > 0:
             weights = weights_history.pop()
             print(f"undo: {len(weights_history)}")
             update_mesh()
+    psim.SameLine()
+    if psim.Button("reset"):
+        raw_weights = np.zeros(len(blendshapes))
+        weights = np.zeros(len(blendshapes))
+        update_mesh()
     psim.Separator()
     selection_changed, selection_threshold = psim.SliderFloat(
         "selection threshold", selection_threshold, v_min=0, v_max=1)
@@ -64,14 +69,22 @@ def gui():
 
     if changed.any():
         changed_index = np.where(changed)[0]
-        # global_proj_weights = projection(weights, model)
-        activated = (similarity[changed_index] >= np.clip(
-            selection_threshold+1e-8, 0, 1)).squeeze() 
-        proj_weights = weights.copy()
-        proj_weights *= contextual_weight
-        proj_weights[activated] = weights[activated]
-        weights[activated] = projection(proj_weights, model)[activated]
+        if config["training"]["dataset"] == "SPDeltaWeight":
+            delta_weights = np.zeros(len(blendshapes))
+            delta_weights[changed_index] = weights[changed_index] - raw_weights[changed_index]
+            local_proj_weights = projection(delta_weights, model)
+            weights += local_proj_weights
+            raw_weights[changed_index] = weights[changed_index]
+
+        else:
+            raw_weights[changed_index] = weights[changed_index]
+            activated = (similarity[changed_index] >= np.clip(
+                (1-selection_threshold)+1e-8, 0, 1)).squeeze() 
+            weights[activated] = projection(raw_weights, model)[activated]# during this projection the activate
+            weights[changed_index] = raw_weights[changed_index]
+        # weights[changed_index] = raw_weights[changed_index]
         update_mesh()
+    
 
 ps.set_verbosity(0)
 ps.set_SSAA_factor(4)

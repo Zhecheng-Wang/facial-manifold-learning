@@ -8,8 +8,8 @@ import matplotlib.font_manager as fm
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
-biolinum_font = fm.FontProperties(fname=path)
-sns.set(font=biolinum_font.get_name())
+# biolinum_font = fm.FontProperties(fname=path)
+# sns.set(font=biolinum_font.get_name())
 sns.set_theme()
 
 def parse_BEAT_json(json_path):
@@ -156,6 +156,21 @@ def parse_SP_dataset(dataset_path):
         data = np.load(bin_dataset_path)
     return data
 
+class SPDeltaWeightDataset(Dataset):
+    def __init__(self):
+        dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
+        self.data = parse_SP_dataset(dataset_path)
+        # reverse the data in the first dimension
+        data2 = self.data[::-1]
+        # concate data and data2 in dimension 0
+        self.data = np.concatenate([self.data, data2], axis=0)
+        self.n_frames = self.data.shape[0]
+        self.data = torch.from_numpy(self.data).to(torch.float32)
+    def __len__(self):
+        return self.n_frames
+    def __getitem__(self, idx):
+        return (self.data[idx] - self.data[max(0, idx-1)])
+
 class SPKeyframeDataset(Dataset):
     def __init__(self):
         dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
@@ -205,6 +220,8 @@ def load_dataset(batch_size=32, dataset="BEAT", augment=False):
         dataset = SPDataset()
     elif dataset_name == "SPKeyframe":
         dataset = SPKeyframeDataset()
+    elif dataset_name == "SPDeltaWeight":
+        dataset = SPDeltaWeightDataset()
     else:
         raise NotImplementedError
     print(f"{dataset_name} dataset size: {len(dataset)}")

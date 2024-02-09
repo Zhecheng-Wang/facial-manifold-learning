@@ -4,7 +4,7 @@ from model import *
 from utils import *
 from inference import *
 from blendshapes import *
-from clustering import cluster_blendshapes, cluster_blendshapes_ec8ec1a
+
 def train(config: json):
     if not os.path.exists(config["path"]):
         os.makedirs(config["path"], exist_ok=True)
@@ -66,26 +66,21 @@ if __name__ == "__main__":
     PROJ_ROOT = os.path.join(os.path.dirname(
         os.path.abspath(__file__)), os.pardir)
     blendshapes = load_blendshape(model="SP")
-    cluster = cluster_blendshapes_ec8ec1a(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
-    for i in range(len(cluster)):
-        for j in range(len(cluster[i])):
-            # convert to int32
-            cluster[i][j] = int(cluster[i][j])
+
     # train
     n_blendshapes = len(blendshapes)
     n_hidden_features = 64
-    save_path = os.path.join(PROJ_ROOT, "experiments", "hae")
-    dataset = "SP"
+    save_path = os.path.join(PROJ_ROOT, "experiments", "delta_weight_manifold")
+    dataset = "SPDeltaWeight"
     config = {"path": save_path,
-              "network": {"type": "hae",
+              "network": {"type": "lipmlp",
                           "n_features": n_blendshapes,
                           "hidden_features": n_hidden_features,
                           "num_hidden_layers": 5,
                           "nonlinearity": "ReLU"},
-              "clusters": cluster,
               "training": {"dataset": dataset,
                            "augment": True,
                            "loss": {
-                               "type": "hierarchical"
+                               "type": "lipschitz"
                            }}}
     train(config)
