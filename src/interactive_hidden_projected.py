@@ -10,7 +10,7 @@ import imgui
 PROJ_ROOT = os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), os.pardir))
 
-config = load_config(os.path.join(PROJ_ROOT, "experiments", "lipmlp_sparse_test"))
+config = load_config(os.path.join(PROJ_ROOT, "experiments", "hae"))
 model = load_model(config)
 
 blendshapes = load_blendshape(model="SP")
@@ -79,7 +79,7 @@ def gui():
         weights = np.zeros(len(blendshapes))
         update_mesh()
     psim.Separator()
-    __, __ = custom_slider_with_colored_background("selection threshold", 0.5, 0, 1)
+    # __, __ = custom_slider_with_colored_background("selection threshold", 0.5, 0, 1)
     psim.Separator()
 
     selection_changed, selection_threshold = psim.SliderFloat(
@@ -99,12 +99,10 @@ def gui():
         projected_prev_weight = projection(prev_weight, model)
         projected_new_weight = projection(raw_weights, model)
         weights = weights + (projected_new_weight - projected_prev_weight)
-        weights[changed_index] = raw_weights[changed_index]
+        # weights[changed_index] = raw_weights[changed_index]
         # weights[changed_index] = raw_weights[changed_index]
         update_mesh()
         prev_weight = raw_weights.copy()
-    
-
 ps.set_verbosity(0)
 ps.set_SSAA_factor(4)
 ps.set_program_name("Interactive Viewer")

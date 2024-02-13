@@ -235,6 +235,8 @@ class HierarchicalAutoEncoder(nn.Module):
         ensemble_pred = self.ensemble_decode(self.ensemble_encode(x))
         pred = self.decode(self.gather(self.ensemble_encode(x)))
         return self.gather(ensemble_pred), pred
+    def infer(self, x):
+        return self.forward(x)[1]
 
 def build_model(config:json):
     network_config = config["network"]
