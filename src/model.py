@@ -207,7 +207,7 @@ class HierarchicalAutoEncoder(nn.Module):
             
         self.ensemble_decoder = nn.ModuleList([nn.Sequential(*decoder) for decoder in self.ensemble_decoder])
         
-        self.decoder = [nn.Linear(latent_dimension, hidden_features), nl]
+        self.decoder = [nn.Linear(latent_dimension, hidden_features), nl] # big decoder
         for i in range(num_decoder_layers):
             self.decoder.extend([nn.Linear(hidden_features, hidden_features), nl])
         self.decoder.append(nn.Linear(hidden_features, n_features))
@@ -216,7 +216,7 @@ class HierarchicalAutoEncoder(nn.Module):
         
         self.decoder = nn.Sequential(*self.decoder)
         
-    def gather(self, x):
+    def gather(self, x): 
         return torch.cat(x, dim=-1)
     
     def scatter(self, x):
@@ -226,7 +226,8 @@ class HierarchicalAutoEncoder(nn.Module):
         return [encoder(x[...,cluster]) for encoder, cluster in zip(self.ensemble_encoder, self.clusters)]
     
     def ensemble_decode(self, x):
-        return [decoder(code) for decoder, code in zip(self.ensemble_decoder, x)]
+        # run the decode in parallel with zip operator
+        return [decoder(code) for decoder, code in zip(self.ensemble_decoder, x)] 
     
     def decode(self, x):
         return self.decoder(x)
