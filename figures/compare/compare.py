@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import polyscope as ps
 import PIL
+import json
+
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir))
 src_path = os.path.join(PROJ_ROOT, "src")
 sys.path.append(src_path)

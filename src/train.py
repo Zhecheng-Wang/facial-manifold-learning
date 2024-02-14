@@ -1,11 +1,12 @@
-import json
 import torch
 from model import *
 from utils import *
 from inference import *
 from blendshapes import *
 from clustering import cluster_blendshapes, cluster_blendshapes_ec8ec1a
-def train(config: json):
+import json
+
+def train(config: dict):
     if not os.path.exists(config["path"]):
         os.makedirs(config["path"], exist_ok=True)
     json.dump(config, open(os.path.join(
@@ -13,9 +14,8 @@ def train(config: json):
 
     device = torch.device(
         'cuda') if torch.cuda.is_available() else torch.device('cpu')
-
+    
     model, loss = build_model(config)
-    print(model)
     model.to(device)
 
     # load dataset
@@ -29,7 +29,7 @@ def train(config: json):
 
     # tb logger
     import torch.utils.tensorboard as tb
-    writer = tb.SummaryWriter(config["path"])
+    writer = tb.SummaryWriter(log_dir=config["path"])
 
     model.train()
     # noise_std = config["training"]["noise_std"]
@@ -73,19 +73,23 @@ if __name__ == "__main__":
             cluster[i][j] = int(cluster[i][j])
     # train
     n_blendshapes = len(blendshapes)
-    n_hidden_features = 64
-    save_path = os.path.join(PROJ_ROOT, "experiments", "hae")
+    n_hidden_features = 24
+    save_path = os.path.join(PROJ_ROOT, "experiments", "attention")
     dataset = "SP"
     config = {"path": save_path,
-              "network": {"type": "hae",
+              "network": {"type": "attention",
                           "n_features": n_blendshapes,
                           "hidden_features": n_hidden_features,
-                          "num_hidden_layers": 5,
-                          "nonlinearity": "ReLU"},
+                          "input_embedding_features": 8,
+                          "num_hidden_layers": 3,
+                          "nonlinearity": "ReLU",
+                          "attention_query_features": 8,
+                          "attention_cluster_count": 4},
               "clusters": cluster,
               "training": {"dataset": dataset,
                            "augment": True,
                            "loss": {
-                               "type": "hierarchical"
+                               "type": "cluster_local"
                            }}}
+    torch.autograd.set_detect_anomaly(True)
     train(config)
