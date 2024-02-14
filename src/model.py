@@ -451,11 +451,10 @@ def load_model(config:dict):
         model = AttentiveAutoEncoder(in_features=network_config["n_features"],\
                                         out_features=network_config["n_features"],\
                                         hidden_features=network_config["hidden_features"],\
-                                        input_embedding_features = network_config["input_embedding_features"],\
                                         attention_query_features=network_config["attention_query_features"],\
-                                        attention_cluster_count=network_config["attention_head_count"],\
+                                        input_embedding_features = network_config["input_embedding_features"],\
+                                        attention_cluster_count=network_config["attention_cluster_count"],\
                                         num_encoder_layers=network_config["num_hidden_layers"],\
-                                        latent_dimension=network_config["latent_dimension"],\
                                         num_decoder_layers=network_config["num_hidden_layers"],\
                                         nonlinearity=network_config["nonlinearity"])
     else:
