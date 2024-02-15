@@ -537,6 +537,13 @@ def load_model(config:dict):
                                         num_encoder_layers=network_config["num_hidden_layers"],\
                                         num_decoder_layers=network_config["num_hidden_layers"],\
                                         nonlinearity=network_config["nonlinearity"])
+    elif network_type == "naive_soft_local":
+        model = NaiveMaskingLocalEncoder(network_config["n_features"],\
+                            network_config["n_features"],\
+                            clusters=config["clusters"],\
+                            num_hidden_layers=network_config["num_hidden_layers"],\
+                            hidden_features=network_config["hidden_features"],\
+                            nonlinearity=network_config["nonlinearity"])
     else:
         raise Exception("Invalid network type")
     
