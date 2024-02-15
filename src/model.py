@@ -35,9 +35,9 @@ def l1_reg_mse_loss(recon_x, x, weight=0.1):
     return F.mse_loss(recon_x, x, reduction='mean') + weight * torch.norm(recon_x, p=1)
 
 def masked_local_loss(recon_x, x):
-    loss_lol = 1e-6* recon_x[1]
+    loss_lol = 0
     for i in range(0, len(recon_x[0])):
-        mask = x[2][i]
+        mask = recon_x[-1][i]
         loss_lol += F.mse_loss(recon_x[0][i], x * mask, reduction='mean')
     return loss_lol
 
@@ -248,7 +248,7 @@ class HierarchicalAutoEncoder(nn.Module):
         pred = self.decode(self.gather(self.ensemble_encode(x)))
         return self.gather(ensemble_pred), pred
     def infer(self, x):
-        return self.forward(x)[1]
+        return self.forward(x)[0]
 
 # use attention to generate soft clusters
 class Reshaper(nn.Module):
@@ -412,6 +412,66 @@ class NaiveMaskingLocalEncoder(nn.Module):
             outputs.append(self.net(x * mask))
 
         return outputs, lipschitz_term, self.clusters_mask_hard
+class NaiveMaskingDistributedLocalEncoder(nn.Module):
+    def __init__(self, in_features,\
+                 out_features,\
+                 clusters,\
+                 hidden_features=64,\
+                 num_hidden_layers=4,\
+                 nonlinearity='ReLU'):
+        super().__init__()
+        nls = {'ReLU':nn.ReLU(), 'ELU':nn.ELU()}
+        nl = nls[nonlinearity]
+        # do cluster related stuff
+        self.clusters = clusters
+        clusters_mask_soft = []
+        clusters_mask_hard = []
+        for i in range(len(clusters)):
+            soft_mask = torch.ones(in_features) * 0.05
+            soft_mask[clusters[i]] = 1
+            hard_mask = torch.zeros(in_features)
+            hard_mask[clusters[i]] = 1
+            clusters_mask_soft.append(soft_mask.unsqueeze(0))
+            clusters_mask_hard.append(hard_mask.unsqueeze(0))
+        clusters_mask_soft = torch.concat(clusters_mask_soft, dim=0)
+        clusters_mask_hard = torch.concat(clusters_mask_hard, dim=0)
+        self.register_buffer("clusters_mask_soft", clusters_mask_soft)
+        self.register_buffer("clusters_mask_hard", clusters_mask_hard)
+
+        # build encoder + decoder 
+        self.ensemble_encoder = []
+        for cluster in clusters:
+            encoder = [nn.Linear(in_features, hidden_features), nl]
+            for i in range(num_hidden_layers):
+               encoder.extend([nn.Linear(hidden_features, hidden_features), nl])
+            encoder.append(nn.Linear(hidden_features, out_features))
+            self.ensemble_encoder.append(encoder)
+        self.ensemble_encoder = nn.ModuleList([nn.Sequential(*encoder) for encoder in self.ensemble_encoder])
+        
+        self.ensemble_decoder = []
+        for cluster in clusters:
+            decoder = [nn.Linear(out_features, hidden_features), nl]
+            for i in range(num_hidden_layers):
+                decoder.extend([nn.Linear(hidden_features, hidden_features), nl])
+            decoder.append(nn.Linear(hidden_features, in_features))
+            decoder.append(nn.Sigmoid())
+            self.ensemble_decoder.append(decoder)
+        self.ensemble_decoder = nn.ModuleList([nn.Sequential(*decoder) for decoder in self.ensemble_decoder])
+
+    def infer(self, x):
+        outputs, __ = self.forward(x)
+        output = outputs[0]
+        for i in range(1, len(outputs)):
+            mask = self.clusters_mask_soft[i]
+            output += self.net(outputs[i] * mask)
+        return output
+
+    def forward(self, x):
+        outputs = []
+        for i in range(0, len(self.clusters_mask_soft)):
+            mask = self.clusters_mask_soft[i]
+            outputs.append(self.ensemble_decoder[i](self.ensemble_encoder[i](x * mask)))
+        return outputs, self.clusters_mask_hard
 
 
 def build_model(config:dict):
@@ -455,6 +515,13 @@ def build_model(config:dict):
                                         nonlinearity=network_config["nonlinearity"])
     elif network_type == "naive_soft_local":
         model = NaiveMaskingLocalEncoder(network_config["n_features"],\
+                            network_config["n_features"],\
+                            clusters=config["clusters"],\
+                            num_hidden_layers=network_config["num_hidden_layers"],\
+                            hidden_features=network_config["hidden_features"],\
+                            nonlinearity=network_config["nonlinearity"])
+    elif network_type == "naive_soft_local_distributed":
+        model = NaiveMaskingDistributedLocalEncoder(network_config["n_features"],\
                             network_config["n_features"],\
                             clusters=config["clusters"],\
                             num_hidden_layers=network_config["num_hidden_layers"],\
@@ -540,6 +607,13 @@ def load_model(config:dict):
                                         nonlinearity=network_config["nonlinearity"])
     elif network_type == "naive_soft_local":
         model = NaiveMaskingLocalEncoder(network_config["n_features"],\
+                            network_config["n_features"],\
+                            clusters=config["clusters"],\
+                            num_hidden_layers=network_config["num_hidden_layers"],\
+                            hidden_features=network_config["hidden_features"],\
+                            nonlinearity=network_config["nonlinearity"])
+    elif network_type == "naive_soft_local_distributed":
+        model = NaiveMaskingDistributedLocalEncoder(network_config["n_features"],\
                             network_config["n_features"],\
                             clusters=config["clusters"],\
                             num_hidden_layers=network_config["num_hidden_layers"],\

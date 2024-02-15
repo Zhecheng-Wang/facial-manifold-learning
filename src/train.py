@@ -13,7 +13,7 @@ def train(config: dict):
         config["path"], "config.json"), "w+"), indent=4)
 
     device = torch.device(
-        'cuda') if torch.cuda.is_available() else torch.device('cpu')
+        'cuda:1') if torch.cuda.is_available() else torch.device('cpu')
     
     model, loss = build_model(config)
     model.to(device)
@@ -74,10 +74,10 @@ if __name__ == "__main__":
     # train
     n_blendshapes = len(blendshapes)
     n_hidden_features = 64
-    save_path = os.path.join(PROJ_ROOT, "experiments", "naive_soft_local")
+    save_path = os.path.join(PROJ_ROOT, "experiments", "naive_soft_local_distributed")
     dataset = "SP"
     config = {"path": save_path,
-              "network": {"type": "naive_soft_local",
+              "network": {"type": "naive_soft_local_distributed",
                           "clusters": cluster, 
                           "n_features": n_blendshapes,
                           "hidden_features": n_hidden_features,
