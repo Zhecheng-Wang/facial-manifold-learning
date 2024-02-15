@@ -411,7 +411,7 @@ class NaiveMaskingLocalEncoder(nn.Module):
             mask = self.clusters_mask_soft[i]
             outputs.append(self.net(x * mask))
 
-        return self.net(x), lipschitz_term, self.clusters_mask_hard
+        return outputs, lipschitz_term, self.clusters_mask_hard
 
 
 def build_model(config:dict):
