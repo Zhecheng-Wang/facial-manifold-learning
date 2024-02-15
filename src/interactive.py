@@ -8,7 +8,7 @@ import polyscope.imgui as psim
 PROJ_ROOT = os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), os.pardir))
 
-config = load_config(os.path.join(PROJ_ROOT, "experiments", "naive_soft_local_distributed"))
+config = load_config(os.path.join(PROJ_ROOT, "experiments", "delta_weight_manifold"))
 model = load_model(config)
 
 blendshapes = load_blendshape(model="SP")
@@ -61,16 +61,20 @@ def gui():
     for i in range(len(blendshapes)):
         changed[i], weights[i] = psim.SliderFloat(
             f"{blendshapes.names[i]}", weights[i], v_min=0, v_max=1)
-
+    local_manifold = True
     if changed.any():
-        changed_index = np.where(changed)[0]
-        # global_proj_weights = projection(weights, model)
-        activated = (similarity[changed_index] >= np.clip(
-            selection_threshold+1e-8, 0, 1)).squeeze() 
-        proj_weights = weights.copy()
-        proj_weights *= contextual_weight
-        proj_weights[activated] = weights[activated]
-        weights[activated] = projection(proj_weights, model)[activated]
+        if local_manifold: # in the case that the manifold itself is trained to be localw
+            changed_index = np.where(changed)[0]
+            weights = projection(weights, model)
+        else:
+            changed_index = np.where(changed)[0]
+            # global_proj_weights = projection(weights, model)
+            activated = (similarity[changed_index] >= np.clip(
+                selection_threshold+1e-8, 0, 1)).squeeze() 
+            proj_weights = weights.copy()
+            proj_weights *= contextual_weight
+            proj_weights[activated] = weights[activated]
+            weights[activated] = projection(proj_weights, model)[activated]
         update_mesh()
 
 ps.set_verbosity(0)
