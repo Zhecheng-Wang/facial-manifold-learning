@@ -461,9 +461,6 @@ class NaiveMaskingDistributedLocalEncoder(nn.Module):
     def infer(self, x):
         outputs, __ = self.forward(x)
         output = outputs[0]
-        for i in range(1, len(outputs)):
-            mask = self.clusters_mask_soft[i]
-            output += self.net(outputs[i] * mask)
         return output
 
     def forward(self, x):
@@ -565,7 +562,6 @@ def build_model(config:dict):
 
 def load_model(config:dict):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-
     model_path = os.path.join(config["path"], "model.pt")
     network_config = config["network"]
     network_type = network_config["type"]
@@ -621,7 +617,7 @@ def load_model(config:dict):
                             nonlinearity=network_config["nonlinearity"])
     else:
         raise Exception("Invalid network type")
-    
+    print(model_path)
     state_dict = torch.load(model_path, map_location=device)
     model.load_state_dict(state_dict) 
     
