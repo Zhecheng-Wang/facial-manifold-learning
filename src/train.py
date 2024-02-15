@@ -17,7 +17,7 @@ def train(config: dict):
     
     model, loss = build_model(config)
     model.to(device)
-
+    print(model)
     # load dataset
     dataset = config["training"]["dataset"]
     augment = False
@@ -73,23 +73,21 @@ if __name__ == "__main__":
             cluster[i][j] = int(cluster[i][j])
     # train
     n_blendshapes = len(blendshapes)
-    n_hidden_features = 24
-    save_path = os.path.join(PROJ_ROOT, "experiments", "attention")
+    n_hidden_features = 64
+    save_path = os.path.join(PROJ_ROOT, "experiments", "naive_soft_local")
     dataset = "SP"
     config = {"path": save_path,
-              "network": {"type": "attention",
+              "network": {"type": "naive_soft_local",
+                          "clusters": cluster, 
                           "n_features": n_blendshapes,
                           "hidden_features": n_hidden_features,
-                          "input_embedding_features": 8,
-                          "num_hidden_layers": 3,
-                          "nonlinearity": "ReLU",
-                          "attention_query_features": 8,
-                          "attention_cluster_count": 4},
+                          "num_hidden_layers": 5,
+                          "nonlinearity": "ReLU"},
               "clusters": cluster,
               "training": {"dataset": dataset,
                            "augment": True,
                            "loss": {
-                               "type": "cluster_local"
+                               "type": "masked_local"
                            }}}
     torch.autograd.set_detect_anomaly(True)
     train(config)

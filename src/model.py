@@ -34,6 +34,15 @@ def l1_reg_mse_loss(recon_x, x, weight=0.1):
     # regularize sparsity in output
     return F.mse_loss(recon_x, x, reduction='mean') + weight * torch.norm(recon_x, p=1)
 
+def masked_local_loss(recon_x, x):
+    loss_lol = 1e-6* recon_x[1]
+    for i in range(0, len(recon_x[0])):
+        mask = x[2][i]
+        loss_lol += F.mse_loss(recon_x[0][i], x * mask, reduction='mean')
+    return loss_lol
+
+
+    
 # credit: https://github.com/whitneychiu/lipmlp_pytorch/blob/main/models/lipmlp.py
 class LipschitzLinear(torch.nn.Module):
     def __init__(self, in_features, out_features):
@@ -240,6 +249,7 @@ class HierarchicalAutoEncoder(nn.Module):
     def infer(self, x):
         return self.forward(x)[1]
 
+# use attention to generate soft clusters
 class Reshaper(nn.Module):
     def __init__(self, *args):
         super(Reshaper, self).__init__()
@@ -344,6 +354,65 @@ class AttentiveAutoEncoder(nn.Module):
         
         return per_cluster_output, attention_mask
 
+class NaiveMaskingLocalEncoder(nn.Module):
+    def __init__(self, in_features,\
+                 out_features,\
+                 clusters,\
+                 hidden_features=64,\
+                 num_hidden_layers=4,\
+                 nonlinearity='ReLU'):
+        super().__init__()
+        nls = {'ReLU':nn.ReLU(), 'ELU':nn.ELU()}
+        nl = nls[nonlinearity]
+        # do cluster related stuff
+        self.clusters = clusters
+        clusters_mask_soft = []
+        clusters_mask_hard = []
+        for i in range(len(clusters)):
+            soft_mask = torch.ones(in_features) * 0.05
+            soft_mask[clusters[i]] = 1
+            hard_mask = torch.zeros(in_features)
+            hard_mask[clusters[i]] = 1
+            clusters_mask_soft.append(soft_mask.unsqueeze(0))
+            clusters_mask_hard.append(hard_mask.unsqueeze(0))
+        clusters_mask_soft = torch.concat(clusters_mask_soft, dim=0)
+        clusters_mask_hard = torch.concat(clusters_mask_hard, dim=0)
+        self.register_buffer("clusters_mask_soft", clusters_mask_soft)
+        self.register_buffer("clusters_mask_hard", clusters_mask_hard)
+
+        self.net = []
+        self.net.extend([LipschitzLinear(in_features, hidden_features), nl])
+
+        for i in range(num_hidden_layers):
+            self.net.extend([LipschitzLinear(hidden_features, hidden_features), nl])
+
+        self.net.append(LipschitzLinear(hidden_features, out_features))
+        self.net.append(nn.Sigmoid())
+
+        self.net = nn.Sequential(*self.net)
+
+
+    
+    def infer(self, x):
+        output = self.net(self.clusters_mask_soft[0] * x)
+        for i in range(1, len(self.clusters_mask_soft)):
+            mask = self.clusters_mask_soft[i]
+            output += self.net(x * mask)
+        return output
+
+    def forward(self, x):
+        lipschitz_term = 1.0
+        for layer in self.net:
+            if isinstance(layer, LipschitzLinear):
+                lipschitz_term *= layer.get_lipschitz_constant()
+        outputs = []
+        for i in range(0, len(self.clusters_mask_soft)):
+            mask = self.clusters_mask_soft[i]
+            outputs.append(self.net(x * mask))
+
+        return self.net(x), lipschitz_term, self.clusters_mask_hard
+
+
 def build_model(config:dict):
     network_config = config["network"]
     network_type = network_config["type"]
@@ -383,6 +452,13 @@ def build_model(config:dict):
                                         num_encoder_layers=network_config["num_hidden_layers"],\
                                         num_decoder_layers=network_config["num_hidden_layers"],\
                                         nonlinearity=network_config["nonlinearity"])
+    elif network_type == "naive_soft_local":
+        model = NaiveMaskingLocalEncoder(network_config["n_features"],\
+                            network_config["n_features"],\
+                            clusters=config["clusters"],\
+                            num_hidden_layers=network_config["num_hidden_layers"],\
+                            hidden_features=network_config["hidden_features"],\
+                            nonlinearity=network_config["nonlinearity"])
     else:
         raise Exception("Invalid network type")
     
@@ -413,6 +489,10 @@ def build_model(config:dict):
         loss = hierarchical_loss
     elif loss_type == "cluster_local":
         loss = cluster_local_loss
+    elif loss_type == "masked_local":
+        loss = masked_local_loss
+    else:
+        raise Exception("Invalid loss type")
     return model, loss
 
 def load_model(config:dict):
