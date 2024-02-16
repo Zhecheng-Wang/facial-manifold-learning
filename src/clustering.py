@@ -1,5 +1,6 @@
 import numpy as np
-from blendshapes import BasicBlendshapes, load_blendshape
+from blendshapes import BasicBlendshapes
+from utils import load_blendshape
 import polyscope as ps
 from matplotlib import pyplot as plt
 

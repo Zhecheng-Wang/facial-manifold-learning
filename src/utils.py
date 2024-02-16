@@ -5,12 +5,101 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import seaborn as sns
 import matplotlib.font_manager as fm
+from blendshapes import BasicBlendshapes
+import igl
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
 # biolinum_font = fm.FontProperties(fname=path)
 # sns.set(font=biolinum_font.get_name())
 sns.set_theme()
+
+def load_blendshape(model="ARKit"):
+    if model == "ARKit":
+        return load_ARKit_blendshape()
+    elif model == "SP":
+        return load_SP_blendshape()
+    else:
+        raise NotImplementedError
+    
+def load_ARKit_blendshape():
+    path = os.path.join(PROJ_ROOT, "data", "AppleAR", "OBJs")
+    blendshape_names = [
+        "browDownLeft",
+        "browDownRight",
+        "browInnerUp",
+        "browOuterUpLeft",
+        "browOuterUpRight",
+        "cheekPuff",
+        "cheekSquintLeft",
+        "cheekSquintRight",
+        "eyeBlinkLeft",
+        "eyeBlinkRight",
+        "eyeLookDownLeft",
+        "eyeLookDownRight",
+        "eyeLookInLeft",
+        "eyeLookInRight",
+        "eyeLookOutLeft",
+        "eyeLookOutRight",
+        "eyeLookUpLeft",
+        "eyeLookUpRight",
+        "eyeSquintLeft",
+        "eyeSquintRight",
+        "eyeWideLeft",
+        "eyeWideRight",
+        "jawForward",
+        "jawLeft",
+        "jawOpen",
+        "jawRight",
+        "mouthClose",
+        "mouthDimpleLeft",
+        "mouthDimpleRight",
+        "mouthFrownLeft",
+        "mouthFrownRight",
+        "mouthFunnel",
+        "mouthLeft",
+        "mouthLowerDownLeft",
+        "mouthLowerDownRight",
+        "mouthPressLeft",
+        "mouthPressRight",
+        "mouthPucker",
+        "mouthRight",
+        "mouthRollLower",
+        "mouthRollUpper",
+        "mouthShrugLower",
+        "mouthShrugUpper",
+        "mouthSmileLeft",
+        "mouthSmileRight",
+        "mouthStretchLeft",
+        "mouthStretchRight",
+        "mouthUpperUpLeft",
+        "mouthUpperUpRight",
+        "noseSneerLeft",
+        "noseSneerRight"
+    ]
+    neutral_path = os.path.join(path, "Neutral.obj")
+    V, F = igl.read_triangle_mesh(neutral_path)
+    N_BLENDSHAPES = len(blendshape_names)
+    blendshapes = np.zeros((N_BLENDSHAPES, *V.shape))
+    for i, blendshape_name in enumerate(blendshape_names):
+        blendshape_path = os.path.join(path, f"{blendshape_name}.obj")
+        assert os.path.exists(blendshape_path)
+        VB, _ = igl.read_triangle_mesh(blendshape_path)
+        blendshapes[i] = VB - V
+    return BasicBlendshapes(V, F, blendshapes, blendshape_names)
+
+def load_SP_blendshape():
+    path = os.path.join(PROJ_ROOT, "data", "SP", "blendshapes")
+    n_blendshapes = len(SP_BLENDSHAPE_MAPPING)
+    V, F = igl.read_triangle_mesh(os.path.join(path, "neutral.obj"))
+    blendshapes = np.zeros((n_blendshapes, *V.shape))
+    names = []
+    for i, (_, file_name) in enumerate(SP_BLENDSHAPE_MAPPING):
+        file_path = os.path.join(path, file_name)
+        VB, _ = igl.read_triangle_mesh(file_path)
+        blendshapes[i] = VB - V
+        names.append(file_name.split(".")[0])
+    return BasicBlendshapes(V, F, blendshapes, names)
 
 def parse_BEAT_json(json_path):
     j = json.load(open(json_path))
@@ -209,7 +298,7 @@ class SingleActivationDataset(Dataset):
         return self.n_frames
     
     def __getitem__(self, idx):
-        return self.data[idx]
+        return self.data[idx], 
 
 def load_dataset(batch_size=32, dataset="BEAT", augment=False):
     dataset_name = dataset

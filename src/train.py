@@ -3,7 +3,6 @@ from model import *
 from utils import *
 from inference import *
 from blendshapes import *
-from clustering import cluster_blendshapes, cluster_blendshapes_ec8ec1a, cluster_blendshapes_kmeans
 import json
 
 def train(config: dict):
@@ -15,7 +14,7 @@ def train(config: dict):
     device = torch.device(
         'cuda') if torch.cuda.is_available() else torch.device('cpu')
     
-    model, loss = build_model(config)
+    model = build_model(config)
     model.to(device)
     print(model)
     # load dataset
@@ -32,30 +31,34 @@ def train(config: dict):
     writer = tb.SummaryWriter(log_dir=config["path"])
 
     model.train()
-    # noise_std = config["training"]["noise_std"]
+    torch.autograd.set_detect_anomaly(True)
+    n_blendshapes = config["network"]["n_features"]
     n_epochs = 1000
     from tqdm import tqdm
     pbar = tqdm(range(n_epochs))
     step = 0
     for epoch in pbar:
-        for data in dataset:
-            data = data.to(device)
-            # if noise_std > 0.0:
-            #     data += torch.randn_like(data).to(device) * noise_std
-            #     data = torch.clip(data, 0, 1)
+        for weights in dataset:
+            weights = weights.to(device)
+            for i in range(n_blendshapes):
+                # alpha = torch.rand(weights.shape[0]).to(device).unsqueeze(1)
+                alpha = torch.zeros(weights.shape[0]).to(device).unsqueeze(1)
+                id = torch.tensor([i] * weights.shape[0]).to(device).unsqueeze(1)
+                # id = torch.arange(weights.shape[0]).to(device).unsqueeze(1)
+                # print(weights.shape, id.shape, alpha.shape)
 
-            pred = model(data)
-            loss_val = loss(pred, data)
-            writer.add_scalar("loss", loss_val.item(), step)
+                weights_pred = model(weights, alpha, id)
+                loss = torch.mean((weights_pred - weights) ** 2)
+                writer.add_scalar("loss", loss.item(), step)
 
-            optimizer.zero_grad()
-            loss_val.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            step += 1
+                step += 1
 
-        pbar.set_description(f"loss: {loss_val.item():.4f}", refresh=True)
-        save_model(model, config)
+            pbar.set_description(f"loss: {loss.item():.4f}", refresh=True)
+            save_model(model, config)
     save_model(model, config)
 
 if __name__ == "__main__":
@@ -66,30 +69,19 @@ if __name__ == "__main__":
     PROJ_ROOT = os.path.join(os.path.dirname(
         os.path.abspath(__file__)), os.pardir)
     blendshapes = load_blendshape(model="SP")
-    # cluster = cluster_blendshapes_ec8ec1a(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
-    cluster = cluster_blendshapes_kmeans(blendshapes, 10)
-    print(cluster)
-    for i in range(len(cluster)):
-        for j in range(len(cluster[i])):
-            # convert to int32
-            cluster[i][j] = int(cluster[i][j])
     # train
     n_blendshapes = len(blendshapes)
     n_hidden_features = 64
-    save_path = os.path.join(PROJ_ROOT, "experiments", "hae_fixed")
+    save_path = os.path.join(PROJ_ROOT, "experiments", "controller")
     dataset = "SP"
     config = {"path": save_path,
-              "network": {"type": "hae",
-                          "clusters": cluster, 
+              "network": {"type": "controller",
                           "n_features": n_blendshapes,
                           "hidden_features": n_hidden_features,
                           "num_hidden_layers": 5,
                           "nonlinearity": "ReLU"},
-              "clusters": cluster,
               "training": {"dataset": dataset,
-                           "augment": True,
                            "loss": {
-                               "type": "hierarchical"
+                               "type": "mse"
                            }}}
-    torch.autograd.set_detect_anomaly(True)
     train(config)
