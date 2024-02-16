@@ -254,29 +254,6 @@ def parse_SP_dataset(dataset_path):
     else:
         data = np.load(bin_dataset_path)
     return data
-
-def detect_keyframes(data, threshold=0.5):
-    # detect keyframes
-    keyframes = []
-    for i in range(data.shape[0]-1):
-        if np.linalg.norm(data[i+1] - data[i]) > threshold:
-            keyframes.append(i)
-    return keyframes
-
-class SPKeyframeDataset(Dataset):
-    def __init__(self):
-        dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
-        self.data = parse_SP_dataset(dataset_path)
-        self.keyframes = detect_keyframes(self.data)
-        self.n_frames = len(self.keyframes)
-        self.data = torch.from_numpy(self.data).to(torch.float32)
-    
-    def __len__(self):
-        return self.n_frames
-    
-    def __getitem__(self, idx):
-        return self.data[self.keyframes[idx]]
-
 class SPDataset(Dataset):
     def __init__(self):
         dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
@@ -289,43 +266,42 @@ class SPDataset(Dataset):
     
     def __getitem__(self, idx):
         return self.data[idx]
-    
-class SingleActivationDataset(Dataset):
-    def __init__(self, n_blendshapes):
-        self.data = torch.zeros((n_blendshapes+1, n_blendshapes))
-        for i in range(n_blendshapes):
-            self.data[i, i] = 1.0
-        self.n_frames = self.data.shape[0]
-    
+
+class DynamicMaskDataset(Dataset):
+    def __init__(self, base_dataset):
+        """
+        base_dataset: yields clean w_gt (torch.Tensor shape [m])
+        """
+        self.base = base_dataset
+        self.m = self.base.data.shape[1]
+
     def __len__(self):
-        return self.n_frames
-    
+        return len(self.base)
+
     def __getitem__(self, idx):
-        return self.data[idx], 
+        w_gt = self.base[idx]  # torch.Tensor [m]
+        # 1) pick which blendshape the user is editing
+        selected_id = torch.randint(0, self.m, (1,), dtype=torch.long)
+        # 2) pick cutoff alpha in [0,1]
+        alpha = torch.rand(1)
+        return w_gt, selected_id, alpha
 
-def load_dataset(batch_size=32, dataset="BEAT", augment=False):
-    dataset_name = dataset
-    from torch.utils.data import ConcatDataset
-    if dataset_name == "BEAT":
-        dataset = BEATDataset()
-    elif dataset_name == "SP":
-        dataset = SPDataset()
-    elif dataset_name == "SPKeyframe":
-        dataset = SPKeyframeDataset()
+def load_dataset(batch_size: int = 32,
+                 dataset: str = "SP"):
+    """
+    Returns a DataLoader yielding:
+        (w_gt: Tensor [B, m],
+         selected_id: Tensor [B, 1],
+         alpha: Tensor [B, 1])
+    """
+    if dataset == "SP":
+        from utils import SPDataset
+        base = SPDataset()
+        ds = DynamicMaskDataset(base)
     else:
-        raise NotImplementedError
-    print(f"{dataset_name} dataset size: {len(dataset)}")
-    if augment:
-        n_blendshapes = dataset.data.shape[1]
-        augment_dataset = SingleActivationDataset(n_blendshapes)
-        print(f"Augment dataset size: {len(augment_dataset)}")
-        dataset = ConcatDataset([dataset, augment_dataset])
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-
-def random_sample(dataset, n_samples):
-    if isinstance(dataset, DataLoader):
-        dataset = dataset.dataset
-    return dataset[np.random.choice(len(dataset), n_samples, replace=False)].numpy()
+        raise NotImplementedError(f"Dataset '{dataset}' not supported.")
+    print(f"Loaded {dataset} dataset with {len(ds)} samples")
+    return DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=True)
 
 def load_config(path):
     json_path = os.path.join(path, "config.json")

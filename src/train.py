@@ -1,92 +1,113 @@
-import torch
-from model import *
-from utils import *
-from inference import *
-from blendshapes import *
+import os
 import json
+import torch
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+from utils import load_dataset, load_blendshape
+from model import build_model, save_model, KL_divergence
+from clustering import compute_jaccard_similarity
+
 
 def train(config: dict):
-    if not os.path.exists(config["path"]):
-        os.makedirs(config["path"], exist_ok=True)
-    json.dump(config, open(os.path.join(
-        config["path"], "config.json"), "w+"), indent=4)
+    # Prepare output folder & config dump
+    os.makedirs(config["path"], exist_ok=True)
+    json.dump(config, open(os.path.join(config["path"], "config.json"), "w+"), indent=2)
 
-    device = torch.device(
-        'cuda') if torch.cuda.is_available() else torch.device('cpu')
-    
-    model = build_model(config)
-    model.to(device)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = build_model(config).to(device)
     print(model)
-    # load dataset
-    dataset = config["training"]["dataset"]
-    augment = False
-    if "augment" in config["training"]:
-        augment = config["training"]["augment"]
-    dataset = load_dataset(dataset=dataset, augment=augment)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    # DataLoader now yields (w_gt, selected_id, alpha)
+    loader = load_dataset(
+        batch_size=config["training"].get("batch_size", 32),
+        dataset=config["training"]["dataset"],
+    )
 
-    # tb logger
-    import torch.utils.tensorboard as tb
-    writer = tb.SummaryWriter(log_dir=config["path"])
+    optimizer = torch.optim.Adam(model.parameters(), lr=config["training"].get("lr", 1e-3))
+    writer = SummaryWriter(log_dir=config["path"])
 
     model.train()
-    n_blendshapes = config["network"]["n_features"]
-    n_epochs = 10000
-    from tqdm import tqdm
-    pbar = tqdm(range(n_epochs))
     step = 0
-    for epoch in pbar:
-        for w in dataset:
-            w = w.to(device)
-            # !: in theory this sampling works, but would the frequency of sampling be sufficient? Doubt that.
-            # Sample alpha values from a uniform distribution between 0 and 1
-            alpha = torch.rand(w.shape[0], 1).to(device)
-            # Sample ids uniformly across the blendshape range
-            id = torch.randint(0, n_blendshapes, (w.shape[0], 1)).to(device)
+    noise_std = config["training"].get("noise_std", 0.05)
+    kl_weight = config["training"].get("kl_weight", 1.0)
 
-            # add noise to the input
-            mask = model.valid_mask(alpha, id)
-            std = 0.5
-            w_tilde = w + torch.randn_like(w) * mask * std
-            # clip to [0, 1]
-            w_tilde = torch.clamp(w_tilde, 0, 1)
-            w_pred, mask = model(w_tilde, alpha, id)
-            loss = torch.mean((w_pred - w)**2)
-            # loss = torch.mean((w_pred  - w * mask)**2) + torch.mean((w_pred * ~mask - w_tilde * ~mask)**2)
-            writer.add_scalar("loss", loss.item(), step)
+    for epoch in range(config["training"].get("n_epochs", 200)):
+        pbar = tqdm(loader, desc=f"Epoch {epoch}")
+        for w_gt, selected_id, alpha in pbar:
+            # Move to device
+            w_gt = w_gt.to(device)                 # [B, m]
+            selected_id = selected_id.to(device)   # [B, 1]
+            alpha = alpha.to(device)               # [B, 1]
+
+            # Compute mask inside model
+            mask = model.valid_mask(alpha, selected_id)  # [B, m]
+
+            # Corrupt only masked entries
+            noise = torch.randn_like(w_gt) * noise_std * mask
+            w_in = torch.clamp(w_gt + noise, 0.0, 1.0)
+
+            # Forward pass
+            w_pred, mu, logvar, mask_pred = model(w_in, selected_id, alpha)
+
+            # Reconstruction loss only on mask_pred == 1
+            rec_loss = ((w_pred - w_gt) ** 2 * mask_pred).sum(dim=1).mean()
+
+            # KL divergence
+            kl_loss = KL_divergence(mu, logvar).mean()
+
+            # Total loss
+            loss = rec_loss + kl_weight * kl_loss
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
+            # Logging
+            writer.add_scalar("loss/total", loss.item(), step)
+            writer.add_scalar("loss/reconstruction", rec_loss.item(), step)
+            writer.add_scalar("loss/kl", kl_loss.item(), step)
             step += 1
 
-        pbar.set_description(f"loss: {loss.item():.4f}", refresh=True)
+            pbar.set_postfix({
+                "rec": f"{rec_loss.item():.4f}",
+                "kl":  f"{kl_loss.item():.4f}"  
+            })
+
+        # Save checkpoint each epoch
         save_model(model, config)
+
+    # Final save
     save_model(model, config)
 
+
 if __name__ == "__main__":
-    from utils import *
-    from inference import *
-    # load the blendshape model
-    import os
-    PROJ_ROOT = os.path.join(os.path.dirname(
-        os.path.abspath(__file__)), os.pardir)
+    from utils import PROJ_ROOT
+    from clustering import compute_jaccard_similarity
+
+    # Load blendshapes (for external similarity)
     blendshapes = load_blendshape(model="SP")
-    # train
-    n_blendshapes = len(blendshapes)
-    n_hidden_features = 64
-    save_path = os.path.relpath(os.path.join(PROJ_ROOT, "experiments", "controller"))
-    dataset = "SP"
-    config = {"path": save_path,
-              "network": {"type": "controller",
-                          "n_features": n_blendshapes,
-                          "hidden_features": n_hidden_features,
-                          "num_hidden_layers": 5,
-                          "nonlinearity": "ReLU"},
-              "training": {"dataset": dataset,
-                           "loss": {
-                               "type": "mse"
-                           }}}
+    S = compute_jaccard_similarity(blendshapes, threshold=0.1)
+
+    # Build config
+    config = {
+        "path": os.path.join(PROJ_ROOT, "experiments", "controller"),
+        "network": {
+            "type": "controller",
+            "n_features": len(blendshapes),
+            "hidden_features": 64,
+            "num_encoder_layers": 5,
+            "latent_dim": 8,
+            "num_decoder_layers": 5,
+            "nonlinearity": "ReLU",
+        },
+        "training": {
+            "dataset": "SP",
+            "similarity": S.tolist(),
+            "batch_size": 32,
+            "lr": 1e-4,
+            "n_epochs": 1000,
+            "kl_weight": 1.0,
+            "noise_std": 0.05,
+        }
+    }
     train(config)
