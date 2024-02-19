@@ -10,7 +10,7 @@ class BasicBlendshapes:
         # V = (# of vertices, 3)
         # F = (# of faces, 3)
         # blenshapes = (# of blendshapes, # of vertices, 3)
-        self.V = V
+        self.V = V # this is also the neutral pose
         self.V -= np.mean(self.V, axis=0)
         self.F = F
         self.blendshapes = blenshapes
