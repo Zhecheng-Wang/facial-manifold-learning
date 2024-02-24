@@ -242,8 +242,13 @@ def cluster_blendshapes_kmeans(blendshapes:BasicBlendshapes, m_clusters_max=8):
             break
     if elbow_point == -1:
         elbow_point = len(clusters_n_intra_cluster_distance) - 1
-
-    return clusters_n[elbow_point]
+    # cluster as arrays
+    cluster_arr = clusters_n[elbow_point]
+    # convert the list of array to list of list
+    clusters_list = []
+    for i in range(len(cluster_arr)):
+        clusters_list.append(list(cluster_arr[i]))
+    return clusters_list
 
 def cluster_blendshapes_ec8ec1a(blendshapes:BasicBlendshapes, cluster_threshold=0.25, activate_threshold=0.1):
     """cluster blendshapes based on IoU between regions of influence, only return clusters without mirror symmetry

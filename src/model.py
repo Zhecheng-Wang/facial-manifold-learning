@@ -194,7 +194,7 @@ class HierarchicalAutoEncoder(nn.Module):
             latent_dimension += cluster_latent_dimension
             encoder = [nn.Linear(n_cluster_features, hidden_features), nl]
             for i in range(num_encoder_layers):
-               encoder.extend([nn.Linear(hidden_features, hidden_features), nl])
+                encoder.extend([nn.Linear(hidden_features, hidden_features), nl])
             encoder.append(nn.Linear(hidden_features, cluster_latent_dimension))
             self.ensemble_encoder.append(encoder)
         self.ensemble_encoder = nn.ModuleList([nn.Sequential(*encoder) for encoder in self.ensemble_encoder])
@@ -218,21 +218,6 @@ class HierarchicalAutoEncoder(nn.Module):
             
         self.ensemble_decoder = nn.ModuleList([nn.Sequential(*decoder) for decoder in self.ensemble_decoder])
         
-        self.decoder = [nn.Linear(latent_dimension, hidden_features), nl] # big decoder
-        for i in range(num_decoder_layers):
-            self.decoder.extend([nn.Linear(hidden_features, hidden_features), nl])
-        self.decoder.append(nn.Linear(hidden_features, n_features))
-        # output layer clamp values between 0 and 1
-        self.decoder.append(nn.Sigmoid())
-        
-        self.decoder = nn.Sequential(*self.decoder)
-        
-    def gather(self, x): 
-        return torch.cat(x, dim=-1)
-    
-    def scatter(self, x):
-        return [x[...,cluster] for cluster in self.clusters]
-        
     def ensemble_encode(self, x):
         return [encoder(x[...,cluster]) for encoder, cluster in zip(self.ensemble_encoder, self.clusters)]
     
@@ -240,15 +225,15 @@ class HierarchicalAutoEncoder(nn.Module):
         # run the decode in parallel with zip operator
         return [decoder(code) for decoder, code in zip(self.ensemble_decoder, x)] 
     
-    def decode(self, x):
-        return self.decoder(x)
-        
     def forward(self, x):
         ensemble_pred = self.ensemble_decode(self.ensemble_encode(x))
-        pred = self.decode(self.gather(self.ensemble_encode(x)))
-        return self.gather(ensemble_pred), pred
+        out = torch.zeros_like(x)
+        for pred, cluster in zip(ensemble_pred, self.clusters):
+            out[..., cluster] = pred
+        return out
+    
     def infer(self, x):
-        return self.forward(x)[0]
+        return self.forward(x)
 
 # use attention to generate soft clusters
 class Reshaper(nn.Module):

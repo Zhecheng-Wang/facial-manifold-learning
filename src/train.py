@@ -3,7 +3,7 @@ from model import *
 from utils import *
 from inference import *
 from blendshapes import *
-from clustering import cluster_blendshapes, cluster_blendshapes_ec8ec1a
+from clustering import cluster_blendshapes, cluster_blendshapes_ec8ec1a, cluster_blendshapes_kmeans
 import json
 
 def train(config: dict):
@@ -13,7 +13,7 @@ def train(config: dict):
         config["path"], "config.json"), "w+"), indent=4)
 
     device = torch.device(
-        'cuda:1') if torch.cuda.is_available() else torch.device('cpu')
+        'cuda') if torch.cuda.is_available() else torch.device('cpu')
     
     model, loss = build_model(config)
     model.to(device)
@@ -66,7 +66,9 @@ if __name__ == "__main__":
     PROJ_ROOT = os.path.join(os.path.dirname(
         os.path.abspath(__file__)), os.pardir)
     blendshapes = load_blendshape(model="SP")
-    cluster = cluster_blendshapes_ec8ec1a(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
+    # cluster = cluster_blendshapes_ec8ec1a(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
+    cluster = cluster_blendshapes_kmeans(blendshapes, 10)
+    print(cluster)
     for i in range(len(cluster)):
         for j in range(len(cluster[i])):
             # convert to int32
@@ -74,10 +76,10 @@ if __name__ == "__main__":
     # train
     n_blendshapes = len(blendshapes)
     n_hidden_features = 64
-    save_path = os.path.join(PROJ_ROOT, "experiments", "naive_soft_local_distributed")
+    save_path = os.path.join(PROJ_ROOT, "experiments", "hae_fixed")
     dataset = "SP"
     config = {"path": save_path,
-              "network": {"type": "naive_soft_local_distributed",
+              "network": {"type": "hae",
                           "clusters": cluster, 
                           "n_features": n_blendshapes,
                           "hidden_features": n_hidden_features,
@@ -87,7 +89,7 @@ if __name__ == "__main__":
               "training": {"dataset": dataset,
                            "augment": True,
                            "loss": {
-                               "type": "masked_local"
+                               "type": "hierarchical"
                            }}}
     torch.autograd.set_detect_anomaly(True)
     train(config)
