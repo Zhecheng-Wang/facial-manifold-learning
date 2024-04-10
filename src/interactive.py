@@ -8,13 +8,13 @@ import polyscope.imgui as psim
 PROJ_ROOT = os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), os.pardir))
 
-config = load_config(os.path.join(PROJ_ROOT, "experiments", "delta_weight_manifold"))
+config = load_config(os.path.join(PROJ_ROOT, "experiments", "controller"))
 model = load_model(config)
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+model.to(device)
 
 blendshapes = load_blendshape(model="SP")
 weights = np.zeros(len(blendshapes))
-local_proj_weights = projection(np.zeros(len(blendshapes)), model)
-global_proj_weights = projection(np.zeros(len(blendshapes)), model)
 
 # similarity = compute_ruzicka_similarity(blendshapes)
 similarity = compute_jaccard_similarity(blendshapes)
@@ -22,8 +22,6 @@ similarity = compute_jaccard_similarity(blendshapes)
 selection_threshold = 0.5
 # if contextual = 0, then will be inferenced under the current weights
 # if contextual = 1, then will be inferenced under the global weights
-contextual_weight = 1.0
-
 changed_index = 0
 
 weights_history = []
@@ -37,8 +35,8 @@ def update_mesh():
     # SM1.update_vertex_positions(V1)
 
 def gui():
-    global weights, local_proj_weights, global_proj_weights, blendshapes, \
-        selection_threshold, contextual_weight, changed_index, weights_history
+    global weights, blendshapes, \
+        selection_threshold, changed_index, weights_history
     # save snapshot
     if psim.Button("snapshot") or (psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_Space))):
         weights_history.append(weights.copy())
@@ -53,28 +51,19 @@ def gui():
     psim.Separator()
     selection_changed, selection_threshold = psim.SliderFloat(
         "selection threshold", selection_threshold, v_min=0, v_max=1)
-    contextual_changed, contextual_weight = psim.SliderFloat(
-        "contextual weight", contextual_weight, v_min=0, v_max=1)
     psim.Separator()
     # make sliders thinner
     changed = np.zeros(len(blendshapes), dtype=bool)
     for i in range(len(blendshapes)):
         changed[i], weights[i] = psim.SliderFloat(
             f"{blendshapes.names[i]}", weights[i], v_min=0, v_max=1)
-    local_manifold = True
     if changed.any():
-        if local_manifold: # in the case that the manifold itself is trained to be localw
-            changed_index = np.where(changed)[0]
-            weights = projection(weights, model)
-        else:
-            changed_index = np.where(changed)[0]
-            # global_proj_weights = projection(weights, model)
-            activated = (similarity[changed_index] >= np.clip(
-                selection_threshold+1e-8, 0, 1)).squeeze() 
-            proj_weights = weights.copy()
-            proj_weights *= contextual_weight
-            proj_weights[activated] = weights[activated]
-            weights[activated] = projection(proj_weights, model)[activated]
+        changed_index = np.where(changed)[0]
+        proj_weights = weights.copy()
+        with torch.inference_mode():
+            y = model(torch.from_numpy(proj_weights).to(torch.float32).unsqueeze(0), torch.tensor([selection_threshold]).reshape(1,1), torch.tensor([changed_index]).reshape(1,1))
+            proj_weights = y.detach().cpu().numpy()[0]
+        weights = proj_weights
         update_mesh()
 
 ps.set_verbosity(0)
