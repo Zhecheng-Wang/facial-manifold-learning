@@ -125,11 +125,7 @@ class NeuralFaceController(nn.Module):
         return self.encoder(w)
     
     def decode(self, z, alpha, id):
-        # print(f"{id.shape=}")
         id = self.one_hot_encode_id(id).squeeze(1)
-        # print(f"{id.shape=}")
-        # print(f"{z.shape=}")
-        # print(f"{alpha.shape=}")
         z = torch.cat([z, alpha, id], dim=1)
         return self.decoder(z)
     
@@ -137,16 +133,13 @@ class NeuralFaceController(nn.Module):
         return self.forward(w, alpha, id)
         
     def forward(self, w, alpha, id):
-        # print(f"{alpha=}")
-        # print(f"{id=}")
         z = self.encode(w)
         w_pred = self.decode(z, alpha, id)
-        # print(f"{w_pred=}")
         mask = self.valid_mask(alpha, id)
-        # print(f"{mask=}")
-        w_pred = w_pred * mask
-        # print(f"{w_pred=}")
-        return w_pred * alpha + w * (1 - alpha)
+        # for valid index i in mask, w_pred[i] = w_pred[i] * mask[i] + w[i] * (1 - mask[i])
+        # for invalid index i in mask, w_pred[i] = w[i]
+        # therefore enforce only highly related blendshapes are in output (controlled by alpha/id and affinity matrix)
+        return (w_pred * mask) * alpha + ((w * mask) * (1 - alpha)) + (w * ~mask)
 
 def build_model(config:dict):
     network_config = config["network"]

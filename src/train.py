@@ -22,9 +22,9 @@ def train(config: dict):
     augment = False
     if "augment" in config["training"]:
         augment = config["training"]["augment"]
-    dataset = load_dataset(batch_size=64, dataset=dataset, augment=augment)
+    dataset = load_dataset(dataset=dataset, augment=augment)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     # tb logger
     import torch.utils.tensorboard as tb
@@ -32,7 +32,7 @@ def train(config: dict):
 
     model.train()
     n_blendshapes = config["network"]["n_features"]
-    n_epochs = 10000
+    n_epochs = 1000
     from tqdm import tqdm
     pbar = tqdm(range(n_epochs))
     step = 0
