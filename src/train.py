@@ -22,43 +22,41 @@ def train(config: dict):
     augment = False
     if "augment" in config["training"]:
         augment = config["training"]["augment"]
-    dataset = load_dataset(dataset=dataset, augment=augment)
+    dataset = load_dataset(batch_size=64, dataset=dataset, augment=augment)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
 
     # tb logger
     import torch.utils.tensorboard as tb
     writer = tb.SummaryWriter(log_dir=config["path"])
 
     model.train()
-    torch.autograd.set_detect_anomaly(True)
     n_blendshapes = config["network"]["n_features"]
-    n_epochs = 1000
+    n_epochs = 10000
     from tqdm import tqdm
     pbar = tqdm(range(n_epochs))
     step = 0
     for epoch in pbar:
-        for weights in dataset:
-            weights = weights.to(device)
-            for i in range(n_blendshapes):
-                # alpha = torch.rand(weights.shape[0]).to(device).unsqueeze(1)
-                alpha = torch.zeros(weights.shape[0]).to(device).unsqueeze(1)
-                id = torch.tensor([i] * weights.shape[0]).to(device).unsqueeze(1)
-                # id = torch.arange(weights.shape[0]).to(device).unsqueeze(1)
-                # print(weights.shape, id.shape, alpha.shape)
+        for w in dataset:
+            w = w.to(device)
+            # !: in theory this sampling works, but would the frequency of sampling be sufficient? Doubt that.
+            # Sample alpha values from a uniform distribution between 0 and 1
+            alpha = torch.rand(w.shape[0], 1).to(device)
+            # Sample ids uniformly across the blendshape range
+            id = torch.randint(0, n_blendshapes, (w.shape[0], 1)).to(device)
 
-                weights_pred = model(weights, alpha, id)
-                loss = torch.mean((weights_pred - weights) ** 2)
-                writer.add_scalar("loss", loss.item(), step)
+            w_pred = model(w, alpha, id)
+            loss = torch.mean((w_pred - w) ** 2)
+            writer.add_scalar("loss", loss.item(), step)
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-                step += 1
+            step += 1
 
-            pbar.set_description(f"loss: {loss.item():.4f}", refresh=True)
-            save_model(model, config)
+        pbar.set_description(f"loss: {loss.item():.4f}", refresh=True)
+        save_model(model, config)
     save_model(model, config)
 
 if __name__ == "__main__":

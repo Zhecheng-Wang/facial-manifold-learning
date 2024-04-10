@@ -79,7 +79,7 @@ class NeuralFaceController(nn.Module):
                  affinity_matrix,\
                  hidden_features=64,\
                  num_encoder_layers=4,\
-                 latent_dimension=20,\
+                 latent_dimension=5,\
                  num_decoder_layers=4,\
                  nonlinearity='ReLU'):
         super().__init__()
@@ -119,7 +119,7 @@ class NeuralFaceController(nn.Module):
         return self.affinity_matrix[id].squeeze(1) >= alpha
     
     def one_hot_encode_id(self, id):
-        return F.one_hot(id, num_classes=self.n_features)
+        return F.one_hot(id, num_classes=self.n_features).float()
         
     def encode(self, w):
         return self.encoder(w)
@@ -142,10 +142,9 @@ class NeuralFaceController(nn.Module):
         z = self.encode(w)
         w_pred = self.decode(z, alpha, id)
         # print(f"{w_pred=}")
-        mask = self.valid_mask(alpha, id).float()
+        mask = self.valid_mask(alpha, id)
         # print(f"{mask=}")
         w_pred = w_pred * mask
-        return w_pred
         # print(f"{w_pred=}")
         return w_pred * alpha + w * (1 - alpha)
 
