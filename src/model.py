@@ -130,16 +130,15 @@ class NeuralFaceController(nn.Module):
         return self.decoder(z)
     
     def infer(self, w, alpha, id):
-        return self.forward(w, alpha, id)
+        z = self.encode(w)
+        w_pred = self.decode(z, alpha, id)
+        return w_pred
         
     def forward(self, w, alpha, id):
         z = self.encode(w)
         w_pred = self.decode(z, alpha, id)
         mask = self.valid_mask(alpha, id)
-        # for valid index i in mask, w_output[i] = w_pred[i] * mask[i] + w[i] * (1 - mask[i])
-        # for invalid index i in mask, w_output[i] = w_pred[i] + w[i]
-        # therefore enforce only highly related blendshapes are in output (controlled by alpha/id and affinity matrix)
-        return (w_pred * mask) * alpha + ((w * mask) * (1 - alpha)) + (w * ~mask) + (w_pred * ~mask)
+        return w_pred, mask
 
 def build_model(config:dict):
     network_config = config["network"]
