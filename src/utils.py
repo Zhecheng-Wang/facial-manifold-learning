@@ -7,6 +7,7 @@ import seaborn as sns
 import matplotlib.font_manager as fm
 from blendshapes import BasicBlendshapes
 import igl
+import pandas as pd
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
@@ -90,16 +91,38 @@ def load_ARKit_blendshape():
 
 def load_SP_blendshape():
     path = os.path.join(PROJ_ROOT, "data", "SP", "blendshapes")
-    n_blendshapes = len(SP_BLENDSHAPE_MAPPING)
+    valid_names_path = os.path.join(path, "valid_names.txt")
     V, F = igl.read_triangle_mesh(os.path.join(path, "neutral.obj"))
-    blendshapes = np.zeros((n_blendshapes, *V.shape))
-    names = []
-    for i, (_, file_name) in enumerate(SP_BLENDSHAPE_MAPPING):
+    valid_names = []
+    sequences = []
+    if not os.path.exists(valid_names_path):
+        dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
+        df = pd.DataFrame()
+        for root, dirs, files in os.walk(dataset_path):
+            for file in sorted(files):
+                if file.endswith(".txt"):
+                    sequences.append(file)
+                    # append every text file to the data frame
+                    df = pd.concat([df, parse_SP_txt(os.path.join(root, file))])
+        # cull invalid columns where all values are zero
+        df = df.loc[:, (df != 0).any(axis=0)]
+        # save valid names
+        valid_names = df.columns
+        with open(valid_names_path, "w") as f:
+            for name in valid_names:
+                f.write(f"{name}\n")
+    else:
+        with open(valid_names_path, "r") as f:
+            valid_names = f.read().splitlines()
+    blendshapes = []
+    for i, (blendshape_name, file_name) in enumerate(SP_BLENDSHAPE_MAPPING):
+        if blendshape_name not in valid_names:
+            continue
         file_path = os.path.join(path, file_name)
         VB, _ = igl.read_triangle_mesh(file_path)
-        blendshapes[i] = VB - V
-        names.append(file_name.split(".")[0])
-    return BasicBlendshapes(V, F, blendshapes, names)
+        blendshapes.append(VB - V)
+    blendshapes = np.array(blendshapes)
+    return BasicBlendshapes(V, F, blendshapes, valid_names)
 
 def parse_BEAT_json(json_path):
     j = json.load(open(json_path))
@@ -201,7 +224,6 @@ SP_BLENDSHAPE_MAPPING = [
             ]
 
 def parse_SP_txt(txt_path):
-    import pandas as pd
     df = pd.read_csv(txt_path, dtype=np.float32, index_col=0)
     del df["jaw.rotateY"]
     # split columns for blink_ctl.translateY and loBlink_ctl.translateY
@@ -211,7 +233,26 @@ def parse_SP_txt(txt_path):
     df["loBlink_ctl.translateY_neg"] = -df["loBlink_ctl.translateY"].clip(upper=0)
     del df["blink_ctl.translateY"]
     del df["loBlink_ctl.translateY"]
-    data = df.to_numpy()
+    return df
+
+def parse_SP_dataset(dataset_path):
+    bin_dataset_path = os.path.join(dataset_path, "data.npy")
+    if not os.path.exists(bin_dataset_path):
+        sequences = []
+        # make a empty data frame
+        df = pd.DataFrame()
+        for root, dirs, files in os.walk(dataset_path):
+            for file in sorted(files):
+                if file.endswith(".txt"):
+                    sequences.append(file)
+                    # append every text file to the data frame
+                    df = pd.concat([df, parse_SP_txt(os.path.join(root, file))])
+        # cull invalid columns where all values are zero
+        df = df.loc[:, (df != 0).any(axis=0)]
+        data = df.to_numpy()
+        np.save(os.path.join(dataset_path, "data"), data)
+    else:
+        data = np.load(bin_dataset_path)
     return data
 
 def detect_keyframes(data, threshold=0.5):
@@ -221,44 +262,6 @@ def detect_keyframes(data, threshold=0.5):
         if np.linalg.norm(data[i+1] - data[i]) > threshold:
             keyframes.append(i)
     return keyframes
-
-def parse_SP_dataset(dataset_path):
-    bin_dataset_path = os.path.join(dataset_path, "data.npy")
-    if not os.path.exists(bin_dataset_path):
-        sequences = []
-        n_frames = 0
-        for root, dirs, files in os.walk(dataset_path):
-            for file in sorted(files):
-                if file.endswith("Charles.txt"):
-                    sequences.append(file)
-                    df = parse_SP_txt(os.path.join(root, file))
-                    n_frames += df.shape[0]
-        n_controller = len(SP_BLENDSHAPE_MAPPING)
-        data = np.zeros((n_frames, n_controller), dtype=np.float32)
-        c_n_frames = 0
-        for seq in sequences:
-            df = parse_SP_txt(os.path.join(dataset_path, seq))
-            data[c_n_frames:c_n_frames+df.shape[0], :] = df
-            c_n_frames += df.shape[0]
-        np.save(os.path.join(dataset_path, "data"), data)
-    else:
-        data = np.load(bin_dataset_path)
-    return data
-
-class SPDeltaWeightDataset(Dataset):
-    def __init__(self):
-        dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
-        self.data = parse_SP_dataset(dataset_path)
-        # reverse the data in the first dimension
-        data2 = self.data[::-1]
-        # concate data and data2 in dimension 0
-        self.data = np.concatenate([self.data, data2], axis=0)
-        self.n_frames = self.data.shape[0]
-        self.data = torch.from_numpy(self.data).to(torch.float32)
-    def __len__(self):
-        return self.n_frames
-    def __getitem__(self, idx):
-        return (self.data[idx] - self.data[max(0, idx-1)])
 
 class SPKeyframeDataset(Dataset):
     def __init__(self):
@@ -309,8 +312,6 @@ def load_dataset(batch_size=32, dataset="BEAT", augment=False):
         dataset = SPDataset()
     elif dataset_name == "SPKeyframe":
         dataset = SPKeyframeDataset()
-    elif dataset_name == "SPDeltaWeight":
-        dataset = SPDeltaWeightDataset()
     else:
         raise NotImplementedError
     print(f"{dataset_name} dataset size: {len(dataset)}")

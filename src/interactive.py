@@ -37,18 +37,6 @@ def update_mesh():
 def gui():
     global weights, blendshapes, \
         selection_threshold, changed_index, weights_history
-    # save snapshot
-    if psim.Button("snapshot") or (psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_Space))):
-        weights_history.append(weights.copy())
-        print(f"snapshot saved: {len(weights_history)}")
-    psim.SameLine()
-    # undo
-    if psim.Button("undo") or (psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_Backspace))):
-        if len(weights_history) > 0:
-            weights = weights_history.pop()
-            print(f"undo: {len(weights_history)}")
-            update_mesh()
-    psim.Separator()
     selection_changed, selection_threshold = psim.SliderFloat(
         "selection threshold", selection_threshold, v_min=0, v_max=1)
     psim.Separator()
@@ -59,10 +47,7 @@ def gui():
             f"{blendshapes.names[i]}", weights[i], v_min=0, v_max=1)
     if changed.any():
         changed_index = np.where(changed)[0]
-        proj_weights = weights.copy()
-        with torch.inference_mode():
-            y = model(torch.from_numpy(proj_weights).to(torch.float32).unsqueeze(0), torch.tensor([selection_threshold]).reshape(1,1), torch.tensor([changed_index]).reshape(1,1))
-            proj_weights = y.detach().cpu().numpy()[0]
+        proj_weights = projection(weights, model, selection_threshold, changed_index)
         weights = proj_weights
         update_mesh()
 
