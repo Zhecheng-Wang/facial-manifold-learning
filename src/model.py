@@ -4,7 +4,64 @@ import torch.nn as nn
 import torch.nn.functional as F
 from clustering import compute_jaccard_similarity
 from utils import load_blendshape
+import math
+class LipschitzLinear(torch.nn.Module):
+    def __init__(self, in_features, out_features):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = torch.nn.Parameter(torch.empty((out_features, in_features), requires_grad=True))
+        self.bias = torch.nn.Parameter(torch.empty((out_features), requires_grad=True))
+        self.c = torch.nn.Parameter(torch.empty((1), requires_grad=True))
+        self.softplus = torch.nn.Softplus()
+        self.initialize_parameters()
 
+    def initialize_parameters(self):
+        stdv = 1. / math.sqrt(self.weight.size(1))
+        self.weight.data.uniform_(-stdv, stdv)
+        self.bias.data.uniform_(-stdv, stdv)
+
+        # compute lipschitz constant of initial weight to initialize self.c
+        W = self.weight.data
+        W_abs_row_sum = torch.abs(W).sum(1)
+        self.c.data = W_abs_row_sum.max() # just a rough initialization
+
+    def get_lipschitz_constant(self):
+        return self.softplus(self.c)
+
+    def forward(self, input):
+        lipc = self.softplus(self.c)
+        scale = lipc / torch.abs(self.weight).sum(1)
+        scale = torch.clamp(scale, max=1.0)
+        return torch.nn.functional.linear(input, self.weight * scale.unsqueeze(1), self.bias)   
+
+class LipschitzMLP(nn.Module):
+    def __init__(self, in_features, out_features, num_hidden_layers, hidden_features, nonlinearity='ReLU'):
+        super().__init__()
+
+        nls = {'ReLU':nn.ReLU(), 'ELU':nn.ELU()}
+        nl = nls[nonlinearity]
+
+        self.net = []
+        self.net.extend([LipschitzLinear(in_features, hidden_features), nl])
+
+        for i in range(num_hidden_layers):
+            self.net.extend([LipschitzLinear(hidden_features, hidden_features), nl])
+
+        self.net.append(LipschitzLinear(hidden_features, out_features))
+        self.net.append(nn.Sigmoid())
+
+        self.net = nn.Sequential(*self.net)
+
+    def infer(self, x):
+        return self.net(x)
+
+    def forward(self, x):
+        lipschitz_term = 1.0
+        for layer in self.net:
+            if isinstance(layer, LipschitzLinear):
+                lipschitz_term *= layer.get_lipschitz_constant()
+        return self.net(x), lipschitz_term
 class MLP(nn.Module):
     def __init__(self, in_features, out_features, num_hidden_layers, hidden_features, nonlinearity='ReLU'):
         super().__init__()
@@ -165,6 +222,12 @@ def build_model(config:dict):
                                 num_encoder_layers=network_config["num_hidden_layers"],\
                                 num_decoder_layers=network_config["num_hidden_layers"],\
                                 nonlinearity=network_config["nonlinearity"])
+    elif network_type == "lipmlp":
+        model = LipschitzMLP(in_features=network_config["n_features"],\
+                            out_features=network_config["n_features"],\
+                            num_hidden_layers=network_config["num_hidden_layers"],\
+                            hidden_features=network_config["hidden_features"],\
+                            nonlinearity=network_config["nonlinearity"])
     else:
         raise Exception("Invalid network type")
     return model
