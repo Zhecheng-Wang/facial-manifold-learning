@@ -32,7 +32,7 @@ def train(config: dict):
 
     model.train()
     n_blendshapes = config["network"]["n_features"]
-    n_epochs = 1000
+    n_epochs = 10000
     from tqdm import tqdm
     pbar = tqdm(range(n_epochs))
     step = 0
