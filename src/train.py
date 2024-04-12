@@ -70,7 +70,7 @@ if __name__ == "__main__":
     # train
     n_blendshapes = len(blendshapes)
     n_hidden_features = 64
-    save_path = os.path.join(PROJ_ROOT, "experiments", "controller")
+    save_path = os.path.join(PROJ_ROOT, "experiments", "test")
     dataset = "SP"
     config = {"path": save_path,
               "network": {"type": "controller",

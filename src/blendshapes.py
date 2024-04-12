@@ -181,7 +181,7 @@ def load_SP_blendshape():
         blendshapes[i] = VB - V
         names.append(file_name.split(".")[0])
     return BasicBlendshapes(V, F, blendshapes, names)
-def load_blendshape(model="ARKit"):
+def load_blendshape_legacy(model="ARKit"):
     if model == "ARKit":
         return load_ARKit_blendshape()
     elif model == "SP":
