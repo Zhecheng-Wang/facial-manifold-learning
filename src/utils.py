@@ -283,7 +283,13 @@ class SPDataset(Dataset):
         self.data = parse_SP_dataset(dataset_path)
         self.n_frames = self.data.shape[0]
         self.data = torch.from_numpy(self.data).to(torch.float32)
-    
+    def extend_dataset(self, times=1):
+        extension = torch.zeros((self.data.shape[1] * times, self.data.shape[1]))
+        for i in range(times):
+            for j in range(self.data.shape[1]):
+                extension[j + i * self.data.shape[1], j] = 1.0 * ((i + 1) / times)
+        self.data = torch.cat([self.data, extension])
+        print(extension)
     def __len__(self):
         return self.n_frames
     
@@ -310,6 +316,7 @@ def load_dataset(batch_size=32, dataset="BEAT", augment=False):
         dataset = BEATDataset()
     elif dataset_name == "SP":
         dataset = SPDataset()
+        # dataset.extend_dataset(3)
     elif dataset_name == "SPKeyframe":
         dataset = SPKeyframeDataset()
     else:

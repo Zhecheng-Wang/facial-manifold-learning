@@ -44,6 +44,7 @@ def train(config: dict):
             alpha = torch.rand(w.shape[0], 1).to(device)
             # Sample ids uniformly across the blendshape range
             id = torch.randint(0, n_blendshapes, (w.shape[0], 1)).to(device)
+            
 
             w_pred = model(w, alpha, id)
             loss = torch.mean((w_pred - w) ** 2)

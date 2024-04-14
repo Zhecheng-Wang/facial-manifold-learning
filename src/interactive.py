@@ -8,13 +8,14 @@ import polyscope.imgui as psim
 PROJ_ROOT = os.path.abspath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), os.pardir))
 
-config = load_config(os.path.join(PROJ_ROOT, "experiments", "controller"))
+# config = load_config(os.path.join(PROJ_ROOT, "experiments", "test"))
+config = load_config(os.path.join(PROJ_ROOT, "experiments", "test_diffusion"))
 model = load_model(config)
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 model.to(device)
 
 blendshapes = load_blendshape(model="SP")
-print(len(blendshapes))
+# print(len(blendshapes))
 weights = np.zeros(len(blendshapes))
 
 # similarity = compute_ruzicka_similarity(blendshapes)
@@ -63,6 +64,7 @@ def gui():
         selection_threshold, changed_index, weights_history
     selection_changed, selection_threshold = psim.SliderFloat(
         "selection threshold", selection_threshold, v_min=0, v_max=1)
+        
     # update_mesh_color_affinity_map(model, 1)
     psim.Separator()
     # make sliders thinner
@@ -70,8 +72,12 @@ def gui():
     for i in range(len(blendshapes)):
         changed[i], weights[i] = psim.SliderFloat(
             f"{blendshapes.names[i]}", weights[i], v_min=0, v_max=1)
-    if changed.any():
-        changed_index = np.where(changed)[0]
+    if changed.any() or selection_changed: 
+        if sum(changed) > 0:
+            changed_index = np.where(changed)[0]
+        else:
+            changed_index = weights.argmax()
+
         proj_weights = projection(weights, model, selection_threshold, changed_index)
         weights = proj_weights
         update_mesh()
@@ -82,7 +88,7 @@ ACTIVATED_VERTICES = []
 for b in blendshapes.blendshapes:
     # get the vertices of the top 100 activated vertices
     vertices_of_blendshape_b = np.argsort(b)[-100:][0].tolist()
-    print(vertices_of_blendshape_b)
+    # print(vertices_of_blendshape_b)
 
     ACTIVATED_VERTICES.append(vertices_of_blendshape_b.copy())
 ps.set_verbosity(0)
