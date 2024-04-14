@@ -24,7 +24,7 @@ def train(config: dict):
         augment = config["training"]["augment"]
     dataset = load_dataset(dataset=dataset, augment=augment)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
     # tb logger
     import torch.utils.tensorboard as tb
@@ -46,8 +46,15 @@ def train(config: dict):
             id = torch.randint(0, n_blendshapes, (w.shape[0], 1)).to(device)
             
 
-            w_pred = model(w, alpha, id)
-            loss = torch.mean((w_pred - w) ** 2)
+            # add noise to the input
+            mask = model.valid_mask(alpha, id)
+            std = 0.5
+            w_tilde = w + torch.randn_like(w) * mask * std
+            # clip to [0, 1]
+            w_tilde = torch.clamp(w_tilde, 0, 1)
+            w_pred, mask = model(w_tilde, alpha, id)
+            loss = torch.mean((w_pred - w)**2)
+            # loss = torch.mean((w_pred  - w * mask)**2) + torch.mean((w_pred * ~mask - w_tilde * ~mask)**2)
             writer.add_scalar("loss", loss.item(), step)
 
             optimizer.zero_grad()
@@ -71,7 +78,11 @@ if __name__ == "__main__":
     # train
     n_blendshapes = len(blendshapes)
     n_hidden_features = 64
+<<<<<<< HEAD
     save_path = os.path.join(PROJ_ROOT, "experiments", "test")
+=======
+    save_path = os.path.relpath(os.path.join(PROJ_ROOT, "experiments", "controller"))
+>>>>>>> f76d37d1abb8b74c0e99f119b23c90a682f21b7c
     dataset = "SP"
     config = {"path": save_path,
               "network": {"type": "controller",
