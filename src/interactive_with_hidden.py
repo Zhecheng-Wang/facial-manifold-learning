@@ -20,7 +20,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device).eval()
 
 blendshapes = load_blendshape(model="SP")
-
 dataset        = SPDataset()
 frame_weights  = dataset.data.numpy()                 # [N, m]
 n_frames       = len(dataset)
@@ -33,7 +32,7 @@ weights              = np.zeros(n_blendshapes, dtype=float)
 selection_threshold  = 0.5
 current_frame        = 0
 last_slider_index    = 0                              # track “active” BS id
-
+weights_hidden       = np.zeros(n_blendshapes, dtype=float)
 # ---------------------------------------------------------------------
 # Polyscope viewer setup
 # ---------------------------------------------------------------------
@@ -54,6 +53,37 @@ SM0 = ps.register_surface_mesh(
 # ---------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------
+
+def generate_colors(k):
+    """
+    Generate a list of K visually distinct colors as RGBA tuples.
+    Each color is represented as (r, g, b, a) where each value is in [0.0, 1.0]
+    
+    Args:
+        k (int): Number of colors to generate
+        
+    Returns:
+        list: List of K color tuples in (r, g, b, a) format
+    """
+    import colorsys
+    
+    colors = []
+    
+    # Generate colors with good spacing in HSV color space
+    for i in range(k):
+        # Use golden ratio for even distribution around the color wheel
+        h = i * 0.618033988749895 % 1.0  # golden ratio conjugate
+        s = 0.7 + 0.3 * ((i // 3) % 3) / 2.0  # vary the saturation
+        v = 0.85 + 0.15 * ((i // 9) % 2)  # vary the value/brightness
+        
+        # Convert HSV to RGB
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)
+        
+        # Add alpha of 1.0
+        colors.append((r, g, b, 1.0))
+    
+    return colors
+
 def run_controller(w_vec: np.ndarray, sel_id: int) -> np.ndarray:
     """Runs the VAE/MLP controller once and returns a flat numpy vector."""
     w_in  = torch.from_numpy(w_vec).unsqueeze(0).to(device).float()
@@ -62,30 +92,32 @@ def run_controller(w_vec: np.ndarray, sel_id: int) -> np.ndarray:
 
     with torch.no_grad():
         w_pred, *_ = model(w_in, sid, alpha)
-    w_pred = torch.clamp(w_pred, 0.0, 1.0)          # [1, m]
+    w_pred = torch.clamp(w_pred, 0, 1.0)          # [1, m]
     w_pred = w_pred.squeeze(0).cpu().numpy()
-    print(f"Predicted weights: {w_pred}")
-    print(f"Difference with input: {np.abs(w_pred - w_vec)}")
+    # print(f"Predicted weights: {w_pred}")
+    # print(f"Difference with input: {np.abs(w_pred - w_vec)}")
     return w_pred
 
 # ---------------------------------------------------------------------
 # GUI callback
 # ---------------------------------------------------------------------
 def gui():
-    global weights, selection_threshold, current_frame, last_slider_index
+    global weights, selection_threshold, current_frame, last_slider_index, weights_hidden
 
     # ------------------------------------------------ Reset
     if psim.Button("Reset to Canonical"):
-        weights[:]           = 0.0
+        weights_hidden[:]           = 0.0
+        weights[:]               = 0.0
         current_frame        = 0
         last_slider_index    = 0
-        SM0.update_vertex_positions(blendshapes.eval(weights))
+        SM0.update_vertex_positions(blendshapes.eval(weights_hidden))
     
     psim.SameLine()
     if psim.Button("Reset to Frame"):
+        weights_hidden[:]    = frame_weights[current_frame]
         weights[:]           = frame_weights[current_frame]
         last_slider_index    = 0
-        SM0.update_vertex_positions(blendshapes.eval(weights))
+        SM0.update_vertex_positions(blendshapes.eval(weights_hidden))
 
     # ------------------------------------------------ Frame selector
     psim.Text(f"Frame: {current_frame + 1}/{n_frames}")
@@ -95,7 +127,8 @@ def gui():
     if changed_frame:
         current_frame = new_frame
         weights[:]    = frame_weights[current_frame]
-        SM0.update_vertex_positions(blendshapes.eval(weights))
+        weights_hidden = frame_weights[current_frame]
+        SM0.update_vertex_positions(blendshapes.eval(weights_hidden))
 
     psim.Separator()
 
@@ -109,15 +142,34 @@ def gui():
     psim.Separator()
 
     # ------------------------------------------------ Blendshape sliders
-    for i, name in enumerate(blendshapes.names):
-        changed_bs, new_val = psim.SliderFloat(name, float(weights[i]), 0.0, 1.0)
-        if changed_bs:
-            last_slider_index = i
-            weights[i]        = new_val                 # keep user edit
-            w_pred            = run_controller(weights.copy(), sel_id=i)
-            # w_pred[i]         = new_val                 # protect edited coef
-            weights[:]        = w_pred
-            SM0.update_vertex_positions(blendshapes.eval(weights))
+    slider_width = 100
+
+    clusters_names = model.cluster_names
+    cluster_asignment = model.clustering
+    cluster_colors = generate_colors(len(clusters_names))
+    for cluster_i, cluster_name in enumerate(clusters_names):
+        cluster_ids = cluster_asignment[cluster_name]
+        cluster_color = cluster_colors[cluster_i]
+        for i, id in enumerate(cluster_ids):
+            name = blendshapes.names[id]
+            psim.SetNextItemWidth(slider_width)
+            changed_bs, new_val = psim.SliderFloat("##hidden"+str(id), float(weights[id]), 0.0, 1.0)
+            psim.SameLine()
+            psim.SetNextItemWidth(slider_width)
+            psim.PushStyleColor(psim.ImGuiCol_SliderGrab, cluster_color) 
+            psim.BeginDisabled(True)
+            __, __ = psim.SliderFloat(name, float(weights_hidden[id]), 0.0, 1.0)
+            psim.EndDisabled()
+            psim.PopStyleColor(1)
+            if changed_bs:
+                last_slider_index = id
+                weights[id]        = new_val                 # keep user edit
+                w_pred            = run_controller(weights.copy(), sel_id=id)
+                # w_pred[i]         = new_val                 # protect edited coef
+                # weights[:]        = w_pred
+                weights_hidden[:] = w_pred
+                SM0.update_vertex_positions(blendshapes.eval(weights_hidden))
+
 
 
 # ---------------------------------------------------------------------

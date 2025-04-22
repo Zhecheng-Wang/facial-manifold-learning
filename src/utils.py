@@ -8,6 +8,9 @@ import matplotlib.font_manager as fm
 from blendshapes import BasicBlendshapes
 import igl
 import pandas as pd
+import sys
+sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/")
+from scripts.SMOTE import *
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
@@ -254,6 +257,27 @@ def parse_SP_dataset(dataset_path):
     else:
         data = np.load(bin_dataset_path)
     return data
+
+def load_smote_dataset(cluster_n=15, alpha_and_mask=False):
+        # load dataset:
+    dataset = load_dataset(
+        batch_size=32,
+        dataset="SP",
+    )
+    
+    # load smote related data
+    cluster_n = 15
+    smote_X = dataset.dataset.base.data.numpy()
+    try:
+        smote_Y_path = os.path.join("data", "SP", f"k={cluster_n}_cluster_assignment.npy")
+    except:
+        print(f"No cluster assignment file found at {smote_Y_path}")
+        raise FileNotFoundError
+
+    smote_Y = np.load(smote_Y_path)
+    smote_dataset = BalancedSMOTEDataset(smote_X, smote_Y, balance_strategy='both', k=cluster_n, alpha_and_mask=alpha_and_mask)
+    return smote_dataset
+
 class SPDataset(Dataset):
     def __init__(self):
         dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
@@ -286,6 +310,7 @@ class DynamicMaskDataset(Dataset):
         alpha = torch.rand(1)
         return w_gt, selected_id, alpha
 
+
 def load_dataset(batch_size: int = 32,
                  dataset: str = "SP"):
     """
@@ -298,6 +323,8 @@ def load_dataset(batch_size: int = 32,
         from utils import SPDataset
         base = SPDataset()
         ds = DynamicMaskDataset(base)
+    elif dataset == "SP_SMOTE":
+        ds = load_smote_dataset(alpha_and_mask=True)
     else:
         raise NotImplementedError(f"Dataset '{dataset}' not supported.")
     print(f"Loaded {dataset} dataset with {len(ds)} samples")
