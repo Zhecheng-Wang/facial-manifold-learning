@@ -234,6 +234,10 @@ class MultiClusterNeuralFaceController(nn.Module):
                 "upper": upper_face_indices,
                 "lower": lower_face_indices
             }
+        elif isinstance(clustering, list):
+            self.clustering = {}
+            for i, indices in enumerate(clustering):
+                self.clustering[f"cluster_{i}"] = indices
         else:
             self.clustering = clustering
 

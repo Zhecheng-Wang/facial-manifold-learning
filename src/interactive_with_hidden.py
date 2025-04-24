@@ -13,8 +13,8 @@ import polyscope.imgui as psim
 PROJ_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
 )
-
-config = load_config(os.path.join(PROJ_ROOT, "experiments", "rinat_small"))
+# PROJ_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
+config = load_config(os.path.join(PROJ_ROOT, "experiments", "10-clusters"))
 model  = load_model(config)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device).eval()
@@ -22,8 +22,15 @@ model.to(device).eval()
 blendshapes = load_blendshape(model="SP")
 dataset        = SPDataset()
 frame_weights  = dataset.data.numpy()                 # [N, m]
+frame_weights_std = np.std(frame_weights, axis=0)
+
 n_frames       = len(dataset)
 n_blendshapes  = len(blendshapes)
+
+# ---------------------------------------------------------------------
+# computer dataset stats to optimize UI
+# ---------------------------------------------------------------------
+# the standard deviation of the weights
 
 # ---------------------------------------------------------------------
 # Global GUI state
@@ -80,7 +87,7 @@ def generate_colors(k):
         r, g, b = colorsys.hsv_to_rgb(h, s, v)
         
         # Add alpha of 1.0
-        colors.append((r, g, b, 1.0))
+        colors.append([r, g, b, 1.0])
     
     return colors
 
@@ -146,16 +153,31 @@ def gui():
 
     clusters_names = model.cluster_names
     cluster_asignment = model.clustering
+    
+    for cluster_name in clusters_names:
+        cluster_ids = cluster_asignment[cluster_name]
+        cluster_stds = frame_weights_std[cluster_ids].tolist()
+        # sort cluster_ids by cluster_stds
+        cluster_ids = [x for _, x in sorted(zip(cluster_stds, cluster_ids), reverse=True)]    
+        cluster_asignment[cluster_name][:] = cluster_ids
+
     cluster_colors = generate_colors(len(clusters_names))
     for cluster_i, cluster_name in enumerate(clusters_names):
         cluster_ids = cluster_asignment[cluster_name]
         cluster_color = cluster_colors[cluster_i]
+        cluster_stds = frame_weights_std[cluster_ids]
+        # normalized cluster_stds between 0 and 1
+        cluster_stds = (cluster_stds - np.min(cluster_stds)) / (np.max(cluster_stds) - np.min(cluster_stds))
+        cluster_stds += 0.2
+        cluster_stds = np.minimum(cluster_stds, 1)
         for i, id in enumerate(cluster_ids):
             name = blendshapes.names[id]
             psim.SetNextItemWidth(slider_width)
             changed_bs, new_val = psim.SliderFloat("##hidden"+str(id), float(weights[id]), 0.0, 1.0)
             psim.SameLine()
             psim.SetNextItemWidth(slider_width)
+            alpha_color = cluster_stds[i]
+            cluster_color[-1] = alpha_color
             psim.PushStyleColor(psim.ImGuiCol_SliderGrab, cluster_color) 
             psim.BeginDisabled(True)
             __, __ = psim.SliderFloat(name, float(weights_hidden[id]), 0.0, 1.0)
@@ -169,6 +191,7 @@ def gui():
                 # weights[:]        = w_pred
                 weights_hidden[:] = w_pred
                 SM0.update_vertex_positions(blendshapes.eval(weights_hidden))
+        psim.Separator()
 
 
 

@@ -7,7 +7,21 @@ from tqdm import tqdm
 from utils import load_dataset, load_blendshape
 from scripts.SMOTE import BalancedSMOTEDataset
 from model import build_model, save_model, KL_divergence
-from clustering import compute_jaccard_similarity
+from clustering import compute_jaccard_similarity, cluster_blendshapes_kmeans
+
+def convert_numpy_to_python_types(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, list):
+        return [convert_numpy_to_python_types(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_to_python_types(value) for key, value in obj.items()}
+    else:
+        return obj
 
 def train(config: dict):
     # Prepare output folder & config dump
@@ -127,8 +141,9 @@ if __name__ == "__main__":
     #         "noise_std": 0.2,
     #     }
     # }
+
     config = {
-        "path": os.path.join(PROJ_ROOT, "experiments", "rinat_small"),
+        "path": os.path.join(PROJ_ROOT, "experiments", "10-clusters"),
         "network": {
             "type": "rinat_controller",
             "n_features": len(blendshapes),
@@ -137,6 +152,7 @@ if __name__ == "__main__":
             "latent_dim": 7,
             "num_decoder_layers": 1,
             "nonlinearity": "ReLU",
+            "clustering": convert_numpy_to_python_types(cluster_blendshapes_kmeans(blendshapes=blendshapes, m_clusters_max=10)),
         },
         "training": {
             "dataset": "SP_SMOTE",
