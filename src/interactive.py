@@ -1,97 +1,125 @@
 import os
-from blendshapes import *
-from clustering import compute_ruzicka_similarity, compute_jaccard_similarity
-from utils import *
-from inference import *
+import numpy as np
+import torch
+from utils import load_blendshape, SPDataset, load_config
+from clustering import compute_jaccard_similarity
+from model import load_model
 import polyscope as ps
 import polyscope.imgui as psim
-PROJ_ROOT = os.path.abspath(os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), os.pardir))
 
-config = load_config(os.path.join(PROJ_ROOT, "experiments", "delta_weight_manifold"))
-model = load_model(config)
+# ---------------------------------------------------------------------
+# I/O & initialisation
+# ---------------------------------------------------------------------
+PROJ_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
+)
+
+config = load_config(os.path.join(PROJ_ROOT, "experiments", "rinat_small"))
+model  = load_model(config)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device).eval()
 
 blendshapes = load_blendshape(model="SP")
-weights = np.zeros(len(blendshapes))
-local_proj_weights = projection(np.zeros(len(blendshapes)), model)
-global_proj_weights = projection(np.zeros(len(blendshapes)), model)
 
-# similarity = compute_ruzicka_similarity(blendshapes)
-similarity = compute_jaccard_similarity(blendshapes)
+dataset        = SPDataset()
+frame_weights  = dataset.data.numpy()                 # [N, m]
+n_frames       = len(dataset)
+n_blendshapes  = len(blendshapes)
 
-selection_threshold = 0.5
-# if contextual = 0, then will be inferenced under the current weights
-# if contextual = 1, then will be inferenced under the global weights
-contextual_weight = 1.0
+# ---------------------------------------------------------------------
+# Global GUI state
+# ---------------------------------------------------------------------
+weights              = np.zeros(n_blendshapes, dtype=float)
+selection_threshold  = 0.5
+current_frame        = 0
+last_slider_index    = 0                              # track “active” BS id
 
-changed_index = 0
-
-weights_history = []
-
-def update_mesh():
-    global SM0, blendshapes
-    V0 = blendshapes.eval(weights)
-    # V1 = blendshapes.eval(proj_weights)
-    # V1[:, 0] += 20
-    SM0.update_vertex_positions(V0)
-    # SM1.update_vertex_positions(V1)
-
-def gui():
-    global weights, local_proj_weights, global_proj_weights, blendshapes, \
-        selection_threshold, contextual_weight, changed_index, weights_history
-    # save snapshot
-    if psim.Button("snapshot") or (psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_Space))):
-        weights_history.append(weights.copy())
-        print(f"snapshot saved: {len(weights_history)}")
-    psim.SameLine()
-    # undo
-    if psim.Button("undo") or (psim.IsKeyPressed(psim.GetKeyIndex(psim.ImGuiKey_Backspace))):
-        if len(weights_history) > 0:
-            weights = weights_history.pop()
-            print(f"undo: {len(weights_history)}")
-            update_mesh()
-    psim.Separator()
-    selection_changed, selection_threshold = psim.SliderFloat(
-        "selection threshold", selection_threshold, v_min=0, v_max=1)
-    contextual_changed, contextual_weight = psim.SliderFloat(
-        "contextual weight", contextual_weight, v_min=0, v_max=1)
-    psim.Separator()
-    # make sliders thinner
-    changed = np.zeros(len(blendshapes), dtype=bool)
-    for i in range(len(blendshapes)):
-        changed[i], weights[i] = psim.SliderFloat(
-            f"{blendshapes.names[i]}", weights[i], v_min=0, v_max=1)
-    local_manifold = True
-    if changed.any():
-        if local_manifold: # in the case that the manifold itself is trained to be localw
-            changed_index = np.where(changed)[0]
-            weights = projection(weights, model)
-        else:
-            changed_index = np.where(changed)[0]
-            # global_proj_weights = projection(weights, model)
-            activated = (similarity[changed_index] >= np.clip(
-                selection_threshold+1e-8, 0, 1)).squeeze() 
-            proj_weights = weights.copy()
-            proj_weights *= contextual_weight
-            proj_weights[activated] = weights[activated]
-            weights[activated] = projection(proj_weights, model)[activated]
-        update_mesh()
-
+# ---------------------------------------------------------------------
+# Polyscope viewer setup
+# ---------------------------------------------------------------------
 ps.set_verbosity(0)
-ps.set_SSAA_factor(4)
-ps.set_program_name("Interactive Viewer")
+ps.init()
 ps.set_ground_plane_mode("none")
 ps.set_view_projection_mode("orthographic")
-ps.set_autocenter_structures(False)
-ps.set_autoscale_structures(False)
 ps.set_front_dir("z_front")
 ps.set_background_color([0, 0, 0])
-ps.init()
+
+V0  = blendshapes.eval(weights)
+SM0 = ps.register_surface_mesh(
+    "face", V0, blendshapes.F,
+    color=[0.9, 0.9, 0.9], smooth_shade=True,
+    edge_width=0.25, material="normal"
+)
+
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
+def run_controller(w_vec: np.ndarray, sel_id: int) -> np.ndarray:
+    """Runs the VAE/MLP controller once and returns a flat numpy vector."""
+    w_in  = torch.from_numpy(w_vec).unsqueeze(0).to(device).float()
+    alpha = torch.tensor([[selection_threshold]], device=device)
+    sid   = torch.tensor([[sel_id]], dtype=torch.long, device=device)
+
+    with torch.no_grad():
+        w_pred, *_ = model(w_in, sid, alpha)
+    w_pred = torch.clamp(w_pred, 0.0, 1.0)          # [1, m]
+    w_pred = w_pred.squeeze(0).cpu().numpy()
+    print(f"Predicted weights: {w_pred}")
+    print(f"Difference with input: {np.abs(w_pred - w_vec)}")
+    return w_pred
+
+# ---------------------------------------------------------------------
+# GUI callback
+# ---------------------------------------------------------------------
+def gui():
+    global weights, selection_threshold, current_frame, last_slider_index
+
+    # ------------------------------------------------ Reset
+    if psim.Button("Reset to Canonical"):
+        weights[:]           = 0.0
+        current_frame        = 0
+        last_slider_index    = 0
+        SM0.update_vertex_positions(blendshapes.eval(weights))
+    
+    psim.SameLine()
+    if psim.Button("Reset to Frame"):
+        weights[:]           = frame_weights[current_frame]
+        last_slider_index    = 0
+        SM0.update_vertex_positions(blendshapes.eval(weights))
+
+    # ------------------------------------------------ Frame selector
+    psim.Text(f"Frame: {current_frame + 1}/{n_frames}")
+    changed_frame, new_frame = psim.SliderInt(
+        "Go to Frame", current_frame, 0, n_frames - 1
+    )
+    if changed_frame:
+        current_frame = new_frame
+        weights[:]    = frame_weights[current_frame]
+        SM0.update_vertex_positions(blendshapes.eval(weights))
+
+    psim.Separator()
+
+    # ------------------------------------------------ Alpha cutoff
+    changed_alpha, new_alpha = psim.SliderFloat(
+        "alpha cutoff", selection_threshold, 0.0, 1.0
+    )
+    if changed_alpha:
+        selection_threshold = new_alpha
+
+    psim.Separator()
+
+    # ------------------------------------------------ Blendshape sliders
+    for i, name in enumerate(blendshapes.names):
+        changed_bs, new_val = psim.SliderFloat(name, float(weights[i]), 0.0, 1.0)
+        if changed_bs:
+            last_slider_index = i
+            weights[i]        = new_val                 # keep user edit
+            w_pred            = run_controller(weights.copy(), sel_id=i)
+            # w_pred[i]         = new_val                 # protect edited coef
+            weights[:]        = w_pred
+            SM0.update_vertex_positions(blendshapes.eval(weights))
+
+
+# ---------------------------------------------------------------------
 ps.set_user_callback(gui)
-V0 = blendshapes.eval(weights)
-# V1 = blendshapes.eval(global_proj_weights)
-# V1[:, 0] += 20
-SM0 = ps.register_surface_mesh("original", V0, blendshapes.F, color=[
-                               0.9, 0.9, 0.9], smooth_shade=True, edge_width=0.25, material="normal")
-# SM1 = ps.register_surface_mesh("projected", V1, blendshapes.F, color=[0.9,0.9,0.9], smooth_shade=True, edge_width=0.25, material="normal")
 ps.show()

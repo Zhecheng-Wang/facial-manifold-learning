@@ -1,5 +1,6 @@
 import numpy as np
-from blendshapes import BasicBlendshapes, load_blendshape
+from blendshapes import BasicBlendshapes
+from utils import load_blendshape
 import polyscope as ps
 from matplotlib import pyplot as plt
 
@@ -348,7 +349,9 @@ if __name__ == "__main__":
     import time
     start_time = time.time()
     # clusters = cluster_blendshapes(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
-    clusters = cluster_blendshapes_kmeans(blendshapes, m_clusters_max=10)
+    clusters = cluster_blendshapes_kmeans(blendshapes, m_clusters_max=6)
+
+    
 
     end_time = time.time()
     print(f"Clustering took {end_time - start_time} seconds.")

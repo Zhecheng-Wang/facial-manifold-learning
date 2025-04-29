@@ -5,12 +5,127 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import seaborn as sns
 import matplotlib.font_manager as fm
+from blendshapes import BasicBlendshapes
+import igl
+import pandas as pd
+import sys
+sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/")
+from scripts.SMOTE import *
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
 # biolinum_font = fm.FontProperties(fname=path)
 # sns.set(font=biolinum_font.get_name())
 sns.set_theme()
+
+def load_blendshape(model="ARKit"):
+    if model == "ARKit":
+        return load_ARKit_blendshape()
+    elif model == "SP":
+        return load_SP_blendshape()
+    else:
+        raise NotImplementedError
+    
+def load_ARKit_blendshape():
+    path = os.path.join(PROJ_ROOT, "data", "AppleAR", "OBJs")
+    blendshape_names = [
+        "browDownLeft",
+        "browDownRight",
+        "browInnerUp",
+        "browOuterUpLeft",
+        "browOuterUpRight",
+        "cheekPuff",
+        "cheekSquintLeft",
+        "cheekSquintRight",
+        "eyeBlinkLeft",
+        "eyeBlinkRight",
+        "eyeLookDownLeft",
+        "eyeLookDownRight",
+        "eyeLookInLeft",
+        "eyeLookInRight",
+        "eyeLookOutLeft",
+        "eyeLookOutRight",
+        "eyeLookUpLeft",
+        "eyeLookUpRight",
+        "eyeSquintLeft",
+        "eyeSquintRight",
+        "eyeWideLeft",
+        "eyeWideRight",
+        "jawForward",
+        "jawLeft",
+        "jawOpen",
+        "jawRight",
+        "mouthClose",
+        "mouthDimpleLeft",
+        "mouthDimpleRight",
+        "mouthFrownLeft",
+        "mouthFrownRight",
+        "mouthFunnel",
+        "mouthLeft",
+        "mouthLowerDownLeft",
+        "mouthLowerDownRight",
+        "mouthPressLeft",
+        "mouthPressRight",
+        "mouthPucker",
+        "mouthRight",
+        "mouthRollLower",
+        "mouthRollUpper",
+        "mouthShrugLower",
+        "mouthShrugUpper",
+        "mouthSmileLeft",
+        "mouthSmileRight",
+        "mouthStretchLeft",
+        "mouthStretchRight",
+        "mouthUpperUpLeft",
+        "mouthUpperUpRight",
+        "noseSneerLeft",
+        "noseSneerRight"
+    ]
+    neutral_path = os.path.join(path, "Neutral.obj")
+    V, F = igl.read_triangle_mesh(neutral_path)
+    N_BLENDSHAPES = len(blendshape_names)
+    blendshapes = np.zeros((N_BLENDSHAPES, *V.shape))
+    for i, blendshape_name in enumerate(blendshape_names):
+        blendshape_path = os.path.join(path, f"{blendshape_name}.obj")
+        assert os.path.exists(blendshape_path)
+        VB, _ = igl.read_triangle_mesh(blendshape_path)
+        blendshapes[i] = VB - V
+    return BasicBlendshapes(V, F, blendshapes, blendshape_names)
+
+def load_SP_blendshape():
+    path = os.path.join(PROJ_ROOT, "data", "SP", "blendshapes")
+    valid_names_path = os.path.join(path, "valid_names.txt")
+    V, F = igl.read_triangle_mesh(os.path.join(path, "neutral.obj"))
+    valid_names = []
+    sequences = []
+    if not os.path.exists(valid_names_path):
+        dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
+        df = pd.DataFrame()
+        for root, dirs, files in os.walk(dataset_path):
+            for file in sorted(files):
+                if file.endswith(".txt"):
+                    sequences.append(file)
+                    # append every text file to the data frame
+                    df = pd.concat([df, parse_SP_txt(os.path.join(root, file))])
+        # cull invalid columns where all values are zero
+        df = df.loc[:, (df != 0).any(axis=0)]
+        # save valid names
+        valid_names = df.columns
+        with open(valid_names_path, "w") as f:
+            for name in valid_names:
+                f.write(f"{name}\n")
+    else:
+        with open(valid_names_path, "r") as f:
+            valid_names = f.read().splitlines()
+    blendshapes = []
+    for i, (blendshape_name, file_name) in enumerate(SP_BLENDSHAPE_MAPPING):
+        if blendshape_name not in valid_names:
+            continue
+        file_path = os.path.join(path, file_name)
+        VB, _ = igl.read_triangle_mesh(file_path)
+        blendshapes.append(VB - V)
+    blendshapes = np.array(blendshapes)
+    return BasicBlendshapes(V, F, blendshapes, valid_names)
 
 def parse_BEAT_json(json_path):
     j = json.load(open(json_path))
@@ -112,7 +227,6 @@ SP_BLENDSHAPE_MAPPING = [
             ]
 
 def parse_SP_txt(txt_path):
-    import pandas as pd
     df = pd.read_csv(txt_path, dtype=np.float32, index_col=0)
     del df["jaw.rotateY"]
     # split columns for blink_ctl.translateY and loBlink_ctl.translateY
@@ -122,68 +236,47 @@ def parse_SP_txt(txt_path):
     df["loBlink_ctl.translateY_neg"] = -df["loBlink_ctl.translateY"].clip(upper=0)
     del df["blink_ctl.translateY"]
     del df["loBlink_ctl.translateY"]
-    data = df.to_numpy()
-    return data
-
-def detect_keyframes(data, threshold=0.5):
-    # detect keyframes
-    keyframes = []
-    for i in range(data.shape[0]-1):
-        if np.linalg.norm(data[i+1] - data[i]) > threshold:
-            keyframes.append(i)
-    return keyframes
+    return df
 
 def parse_SP_dataset(dataset_path):
     bin_dataset_path = os.path.join(dataset_path, "data.npy")
     if not os.path.exists(bin_dataset_path):
         sequences = []
-        n_frames = 0
+        # make a empty data frame
+        df = pd.DataFrame()
         for root, dirs, files in os.walk(dataset_path):
             for file in sorted(files):
-                if file.endswith("Charles.txt"):
+                if file.endswith(".txt"):
                     sequences.append(file)
-                    df = parse_SP_txt(os.path.join(root, file))
-                    n_frames += df.shape[0]
-        n_controller = len(SP_BLENDSHAPE_MAPPING)
-        data = np.zeros((n_frames, n_controller), dtype=np.float32)
-        c_n_frames = 0
-        for seq in sequences:
-            df = parse_SP_txt(os.path.join(dataset_path, seq))
-            data[c_n_frames:c_n_frames+df.shape[0], :] = df
-            c_n_frames += df.shape[0]
+                    # append every text file to the data frame
+                    df = pd.concat([df, parse_SP_txt(os.path.join(root, file))])
+        # cull invalid columns where all values are zero
+        df = df.loc[:, (df != 0).any(axis=0)]
+        data = df.to_numpy()
         np.save(os.path.join(dataset_path, "data"), data)
     else:
         data = np.load(bin_dataset_path)
     return data
 
-class SPDeltaWeightDataset(Dataset):
-    def __init__(self):
-        dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
-        self.data = parse_SP_dataset(dataset_path)
-        # reverse the data in the first dimension
-        data2 = self.data[::-1]
-        # concate data and data2 in dimension 0
-        self.data = np.concatenate([self.data, data2], axis=0)
-        self.n_frames = self.data.shape[0]
-        self.data = torch.from_numpy(self.data).to(torch.float32)
-    def __len__(self):
-        return self.n_frames
-    def __getitem__(self, idx):
-        return (self.data[idx] - self.data[max(0, idx-1)])
+def load_smote_dataset(cluster_n=15, alpha_and_mask=False):
+        # load dataset:
+    dataset = load_dataset(
+        batch_size=32,
+        dataset="SP",
+    )
+    
+    # load smote related data
+    cluster_n = 15
+    smote_X = dataset.dataset.base.data.numpy()
+    try:
+        smote_Y_path = os.path.join("data", "SP", f"k={cluster_n}_cluster_assignment.npy")
+    except:
+        print(f"No cluster assignment file found at {smote_Y_path}")
+        raise FileNotFoundError
 
-class SPKeyframeDataset(Dataset):
-    def __init__(self):
-        dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
-        self.data = parse_SP_dataset(dataset_path)
-        self.keyframes = detect_keyframes(self.data)
-        self.n_frames = len(self.keyframes)
-        self.data = torch.from_numpy(self.data).to(torch.float32)
-    
-    def __len__(self):
-        return self.n_frames
-    
-    def __getitem__(self, idx):
-        return self.data[self.keyframes[idx]]
+    smote_Y = np.load(smote_Y_path)
+    smote_dataset = BalancedSMOTEDataset(smote_X, smote_Y, balance_strategy='both', k=cluster_n, alpha_and_mask=alpha_and_mask)
+    return smote_dataset
 
 class SPDataset(Dataset):
     def __init__(self):
@@ -197,45 +290,45 @@ class SPDataset(Dataset):
     
     def __getitem__(self, idx):
         return self.data[idx]
-    
-class SingleActivationDataset(Dataset):
-    def __init__(self, n_blendshapes):
-        self.data = torch.zeros((n_blendshapes+1, n_blendshapes))
-        for i in range(n_blendshapes):
-            self.data[i, i] = 1.0
-        self.n_frames = self.data.shape[0]
-    
+
+class DynamicMaskDataset(Dataset):
+    def __init__(self, base_dataset):
+        """
+        base_dataset: yields clean w_gt (torch.Tensor shape [m])
+        """
+        self.base = base_dataset
+        self.m = self.base.data.shape[1]
+
     def __len__(self):
-        return self.n_frames
-    
+        return len(self.base)
+
     def __getitem__(self, idx):
-        return self.data[idx]
+        w_gt = self.base[idx]  # torch.Tensor [m]
+        # 1) pick which blendshape the user is editing
+        selected_id = torch.randint(0, self.m, (1,), dtype=torch.long)
+        # 2) pick cutoff alpha in [0,1]
+        alpha = torch.rand(1)
+        return w_gt, selected_id, alpha
 
-def load_dataset(batch_size=32, dataset="BEAT", augment=False):
-    dataset_name = dataset
-    from torch.utils.data import ConcatDataset
-    if dataset_name == "BEAT":
-        dataset = BEATDataset()
-    elif dataset_name == "SP":
-        dataset = SPDataset()
-    elif dataset_name == "SPKeyframe":
-        dataset = SPKeyframeDataset()
-    elif dataset_name == "SPDeltaWeight":
-        dataset = SPDeltaWeightDataset()
+
+def load_dataset(batch_size: int = 32,
+                 dataset: str = "SP"):
+    """
+    Returns a DataLoader yielding:
+        (w_gt: Tensor [B, m],
+         selected_id: Tensor [B, 1],
+         alpha: Tensor [B, 1])
+    """
+    if dataset == "SP":
+        from utils import SPDataset
+        base = SPDataset()
+        ds = DynamicMaskDataset(base)
+    elif dataset == "SP_SMOTE":
+        ds = load_smote_dataset(alpha_and_mask=True)
     else:
-        raise NotImplementedError
-    print(f"{dataset_name} dataset size: {len(dataset)}")
-    if augment:
-        n_blendshapes = dataset.data.shape[1]
-        augment_dataset = SingleActivationDataset(n_blendshapes)
-        print(f"Augment dataset size: {len(augment_dataset)}")
-        dataset = ConcatDataset([dataset, augment_dataset])
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-
-def random_sample(dataset, n_samples):
-    if isinstance(dataset, DataLoader):
-        dataset = dataset.dataset
-    return dataset[np.random.choice(len(dataset), n_samples, replace=False)].numpy()
+        raise NotImplementedError(f"Dataset '{dataset}' not supported.")
+    print(f"Loaded {dataset} dataset with {len(ds)} samples")
+    return DataLoader(ds, batch_size=batch_size, shuffle=True, drop_last=True)
 
 def load_config(path):
     json_path = os.path.join(path, "config.json")
