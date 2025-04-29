@@ -5,7 +5,6 @@ __pycache__/
 # project
 output/
 report/
-experiments/
 preview/
 *.obj
 *.png
@@ -17,3 +16,6 @@ preview/
 # blender
 *.blend
 *.blend1
+
+# metadata
+.DS_Store
