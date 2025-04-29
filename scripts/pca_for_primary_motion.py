@@ -1,3 +1,7 @@
+import sys
+sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration")
+sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/src")
+
 import os
 import json
 import torch
@@ -9,8 +13,6 @@ from scripts.SMOTE import BalancedSMOTEDataset
 from model import build_model, save_model, KL_divergence
 from clustering import compute_jaccard_similarity, cluster_blendshapes_kmeans
 import matplotlib.pyplot as plt
-import sys
-sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration")
 from scripts.plot_heads import *
 
 def visualize(pca, n_components):
@@ -144,20 +146,23 @@ frame_weights  = dataset.data.numpy()                 # [N, m]
 n_frames       = len(dataset)
 n_blendshapes  = len(blendshapes)
 
-# perform PCA on the dataset
+#  ========================================  perform PCA on the dataset ======================================== 
 from sklearn.decomposition import PCA
-n_components = 20
+n_components = 5
 pca = PCA(n_components=n_components)
 pca.fit(frame_weights)
 
+# ======================================== visualize PCA resutls as faces ========================================
 to_show = []
 for i in range(n_components):
     to_show.append(pca.components_[i] + pca.mean_)
-
 
 ps.init()
 ps.remove_all_structures()
 rows = max(n_components//5, 1)
 cols = min(n_components, 5)
-plot_multiple_faces(blendshapes, cluster_heads, grid_size=[rows, cols], spacing=1)
+plot_multiple_faces(blendshapes, to_show, grid_size=[rows, cols], spacing=1)
 ps.show()
+
+
+
