@@ -1,7 +1,7 @@
 from sklearn.cluster import KMeans, MiniBatchKMeans
 import numpy as np
-import sys
-sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/src")
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 from utils import load_dataset, load_blendshape
 
 

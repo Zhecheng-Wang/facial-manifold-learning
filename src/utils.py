@@ -9,7 +9,7 @@ from blendshapes import BasicBlendshapes
 import igl
 import pandas as pd
 import sys
-sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/")
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
 from scripts.SMOTE import *
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
