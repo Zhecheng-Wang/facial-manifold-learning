@@ -19,3 +19,9 @@ preview/
 
 # metadata
 .DS_Store
+
+
+experiments/
+typings/
+pyrightconfig.json
+

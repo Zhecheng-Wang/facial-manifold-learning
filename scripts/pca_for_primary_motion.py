@@ -1,6 +1,6 @@
 import sys
-sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration")
-sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/src")
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
 
 import os
 import json
