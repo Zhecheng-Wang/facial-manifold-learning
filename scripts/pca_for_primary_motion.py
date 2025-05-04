@@ -1,8 +1,11 @@
 import sys
+import os
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src"))
+sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/src")
+sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration")
 
-import os
+
 import json
 import torch
 import numpy as np
