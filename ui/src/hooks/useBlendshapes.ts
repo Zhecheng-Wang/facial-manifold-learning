@@ -35,7 +35,7 @@ export const useBlendshapes = () => {
     const loadBlendshapes = async () => {
       try {
         // Fetch face data from the Python backend
-        const response = await fetch('http://localhost:5000/face-data');
+        const response = await fetch('http://localhost:5001/face-data');
         if (!response.ok) {
           throw new Error('Failed to load face data');
         }
