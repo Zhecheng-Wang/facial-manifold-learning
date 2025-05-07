@@ -87,7 +87,7 @@ const Controller: React.FC<ControllerProps> = ({
         onPointerMove={isControlMode ? onPointerMove : undefined}
         onPointerUp={onPointerUp}
       >
-        <meshStandardMaterial 
+        <meshStandardMaterial
           color={isActive ? "#0066cc" : "#666666"}
           transparent
           opacity={0.8}
@@ -109,8 +109,8 @@ const Controller: React.FC<ControllerProps> = ({
             itemSize={3}
           />
         </bufferGeometry>
-        <lineBasicMaterial 
-          color={isActive ? "#0066cc" : "#666666"} 
+        <lineBasicMaterial
+          color={isActive ? "#0066cc" : "#666666"}
           linewidth={3}
           transparent
           opacity={0.8}
@@ -125,7 +125,7 @@ const Controller: React.FC<ControllerProps> = ({
         onPointerMove={isControlMode ? onPointerMove : undefined}
         onPointerUp={onPointerUp}
       >
-        <meshStandardMaterial 
+        <meshStandardMaterial
           color={isActive ? "#0066cc" : "#ff0000"}
           transparent
           opacity={0.8}
@@ -157,10 +157,10 @@ const DirectController: React.FC<DirectControllerProps> = ({
   const [isControlMode, setIsControlMode] = useState(false);
   const [dragPlane, setDragPlane] = useState<THREE.Plane | null>(null);
   const [lengthMultiplier, setLengthMultiplier] = useState(0.5); // Default multiplier
-  
+
   // Reference to orbit controls to temporarily disable
   const orbitControlsRef = useRef<any>(null);
-  
+
   // Find and store the orbit controls reference
   useEffect(() => {
     // Look for OrbitControls in the scene
@@ -171,7 +171,7 @@ const DirectController: React.FC<DirectControllerProps> = ({
         }
       });
     };
-    
+
     // Try to find orbit controls after a short delay to ensure they're mounted
     setTimeout(findOrbitControls, 100);
   }, []);
@@ -179,20 +179,20 @@ const DirectController: React.FC<DirectControllerProps> = ({
   // Create geometry and compute normals once
   const { normals, controllerData } = useMemo(() => {
     console.log('Computing controllers for', blendshapes.length, 'blendshapes');
-    
+
     // Create geometry to compute normals
     const tempGeometry = new THREE.BufferGeometry();
     const vertices = new Float32Array(baseVertices);
     tempGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
     tempGeometry.computeVertexNormals();
     const normals = tempGeometry.getAttribute('normal');
-    
+
     // Compute controller data
     const controllerData = blendshapes.map((bs, index) => {
       // Find vertices significantly affected by this blendshape
       const affectedIndices: number[] = [];
       const displacements: number[] = [];
-      
+
       for (let i = 0; i < bs.vertices.length; i += 3) {
         const dx = bs.vertices[i];
         const dy = bs.vertices[i + 1];
@@ -256,10 +256,10 @@ const DirectController: React.FC<DirectControllerProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    
+
     // Status message for user
     console.log(`Hold ${CONTROL_MODIFIER_KEY} key to enter control mode. Use arrow up/down to adjust control length.`);
-    
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
@@ -268,10 +268,10 @@ const DirectController: React.FC<DirectControllerProps> = ({
 
   const handleSphereClick = (index: number) => {
     if (!isControlMode) return;
-    
+
     setActiveSphere(index);
     setIsDragging(true);
-    
+
     if (controllerData[index]) {
       // Create a drag plane perpendicular to the camera
       const controller = controllerData[index];
@@ -280,17 +280,17 @@ const DirectController: React.FC<DirectControllerProps> = ({
         baseVertices[controller.vertexIndex * 3 + 1],
         baseVertices[controller.vertexIndex * 3 + 2]
       );
-      
+
       // Get normal at vertex for proper drag plane orientation
       const normal = new THREE.Vector3(
         normals.getX(controller.vertexIndex),
         normals.getY(controller.vertexIndex),
         normals.getZ(controller.vertexIndex)
       );
-      
+
       // Create a drag plane that contains the controller direction and is aligned with the vertex normal
       const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
-        camera.getWorldDirection(new THREE.Vector3()), 
+        camera.getWorldDirection(new THREE.Vector3()),
         basePosition
       );
       setDragPlane(plane);
@@ -302,7 +302,7 @@ const DirectController: React.FC<DirectControllerProps> = ({
 
     const { point } = event as any;
     const controller = controllerData[activeSphere];
-    
+
     // Get base position
     const basePosition = new THREE.Vector3(
       baseVertices[controller.vertexIndex * 3],
@@ -318,11 +318,11 @@ const DirectController: React.FC<DirectControllerProps> = ({
     );
 
     const center = basePosition.clone().add(normal.multiplyScalar(0.1));
-    
+
     // Project the point onto our control line for more predictable control
     const controlDir = new THREE.Vector3()
       .addVectors(
-        normal.clone().multiplyScalar(0.5), 
+        normal.clone().multiplyScalar(0.5),
         new THREE.Vector3(
           controller.deformation[controller.vertexIndex * 3],
           controller.deformation[controller.vertexIndex * 3 + 1],
@@ -330,17 +330,17 @@ const DirectController: React.FC<DirectControllerProps> = ({
         ).normalize().multiplyScalar(0.5)
       )
       .normalize();
-    
+
     // Create a line representing our control direction
     const line = new THREE.Line3(
       center,
       center.clone().add(controlDir.multiplyScalar(controller.maxLength * lengthMultiplier))
     );
-    
+
     // Project the point onto this line
     const projectedPoint = new THREE.Vector3();
     line.closestPointToPoint(point, true, projectedPoint);
-    
+
     // Calculate distance along the line as a percentage
     const totalLength = line.distance();
     const distance = center.distanceTo(projectedPoint);
@@ -370,7 +370,7 @@ const DirectController: React.FC<DirectControllerProps> = ({
           </mesh>
         </group>
       )}
-      
+
       {controllerData.map((controller, index) => (
         <Controller
           key={controller.name}

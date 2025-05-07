@@ -8,15 +8,8 @@ from blendshapes import BasicBlendshapes
 import igl
 import pandas as pd
 import sys
-<<<<<<< HEAD
-from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-sys.path.append(str(ROOT_DIR))
-
-=======
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
->>>>>>> cvae
 from scripts.SMOTE import *
 
 

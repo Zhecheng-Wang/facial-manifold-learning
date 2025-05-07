@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { MantineProvider } from '@mantine/core';
 import { Canvas } from '@react-three/fiber';
+import { MantineProvider } from '@mantine/core';
 import { OrbitControls, Stats, Environment } from '@react-three/drei';
 import { useControls, folder, LevaPanel, useCreateStore, Leva } from 'leva';
+
 import FaceModel from './components/FaceModel';
-import { useBlendshapes } from './hooks/useBlendshapes';
 import { BlendshapeSliders } from './components/BlendshapeSliders';
+import { useBlendshapes } from './hooks/useBlendshapes';
 
 interface BlendshapeControls {
   [key: string]: number;
@@ -13,7 +14,7 @@ interface BlendshapeControls {
 
 const App: React.FC = () => {
   const { blendshapes, weights, setWeights, loading, error, baseVertices, baseFaces } = useBlendshapes();
-  
+
   // Create separate stores for each panel
   const renderStore = useCreateStore();
   const blendshapeStore = useCreateStore();
@@ -48,6 +49,7 @@ const App: React.FC = () => {
     }
   }, [blendshapeControls, blendshapes, setWeights]);
 
+  // Display loading animation
   if (loading) {
     return (
       <MantineProvider>
@@ -68,20 +70,20 @@ const App: React.FC = () => {
   return (
     <MantineProvider>
       <Leva hidden /> {/* Root Leva component */}
-      
+
       {/* Rendering controls panel */}
       <div style={{ position: 'fixed', left: 16, bottom: 16, zIndex: 1000, width: '300px' }}>
-        <LevaPanel 
+        <LevaPanel
           store={renderStore}
           fill
           flat
           titleBar={false}
         />
       </div>
-      
+
       {/* Blendshapes panel */}
       <div style={{ position: 'fixed', right: 16, top: 16, zIndex: 1000, width: '400px' }}>
-        <LevaPanel 
+        <LevaPanel
           store={blendshapeStore}
           fill
           flat
@@ -102,8 +104,8 @@ const App: React.FC = () => {
         <Canvas camera={{ position: [30, 5, 50], fov: 45 }}>
           <color attach="background" args={['#1a1a1a']} />
           <Stats />
-          
-          <OrbitControls 
+
+          <OrbitControls
             makeDefault
             enableDamping
             dampingFactor={0.1}
@@ -111,13 +113,13 @@ const App: React.FC = () => {
             maxDistance={150}
             target={[0, 0, 0]}
             minPolarAngle={Math.PI / 6}
-            maxPolarAngle={Math.PI * 5/6}
+            maxPolarAngle={Math.PI * 5 / 6}
           />
 
           <Environment preset="apartment" />
           <ambientLight intensity={0.5} />
           <directionalLight position={[2, 2, 5]} intensity={1} castShadow />
-          
+
           {!loading && !error && baseVertices && baseFaces && (
             <FaceModel
               blendshapes={blendshapes}
