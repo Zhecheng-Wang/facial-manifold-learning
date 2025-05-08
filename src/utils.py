@@ -5,14 +5,16 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import seaborn as sns
 import matplotlib.font_manager as fm
-from blendshapes import BasicBlendshapes
+from blendshapes import BasicBlendshapes, FLAMEBlendshapes
 import igl
 import pandas as pd
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
+# sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration")
 from scripts.SMOTE import *
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+# PROJ_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
 path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
 # biolinum_font = fm.FontProperties(fname=path)
 # sns.set(font=biolinum_font.get_name())
@@ -23,9 +25,12 @@ def load_blendshape(model="ARKit"):
         return load_ARKit_blendshape()
     elif model == "SP":
         return load_SP_blendshape()
+    elif model == "FLAME":
+        return FLAMEBlendshapes()
     else:
         raise NotImplementedError
-    
+
+
 def load_ARKit_blendshape():
     path = os.path.join(PROJ_ROOT, "data", "AppleAR", "OBJs")
     blendshape_names = [
@@ -277,6 +282,9 @@ def load_smote_dataset(cluster_n=15, alpha_and_mask=False):
     smote_Y = np.load(smote_Y_path)
     smote_dataset = BalancedSMOTEDataset(smote_X, smote_Y, balance_strategy='both', k=cluster_n, alpha_and_mask=alpha_and_mask)
     return smote_dataset
+
+# def load_mead_ravdess_dataset():
+
 
 class SPDataset(Dataset):
     def __init__(self):
