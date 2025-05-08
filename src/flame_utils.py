@@ -54,7 +54,6 @@ def rot_mat_to_euler(rot_mats):
                     rot_mats[:, 1, 0] * rot_mats[:, 1, 0])
     return torch.atan2(-rot_mats[:, 2, 0], sy)
 
-
 def find_dynamic_lmk_idx_and_bcoords(vertices, pose, dynamic_lmk_faces_idx,
                                      dynamic_lmk_b_coords,
                                      neck_kin_chain, dtype=torch.float32):
@@ -121,7 +120,6 @@ def find_dynamic_lmk_idx_and_bcoords(vertices, pose, dynamic_lmk_faces_idx,
 
     return dyn_lmk_faces_idx, dyn_lmk_b_coords
 
-
 def vertices2landmarks(vertices, faces, lmk_faces_idx, lmk_bary_coords):
     ''' Calculates landmarks by barycentric interpolation
 
@@ -159,7 +157,6 @@ def vertices2landmarks(vertices, faces, lmk_faces_idx, lmk_bary_coords):
 
     landmarks = torch.einsum('blfi,blf->bli', [lmk_vertices, lmk_bary_coords])
     return landmarks
-
 
 def lbs(betas, pose, v_template, shapedirs, posedirs, J_regressor, parents,
         lbs_weights, pose2rot=True, dtype=torch.float32):
@@ -245,7 +242,6 @@ def lbs(betas, pose, v_template, shapedirs, posedirs, J_regressor, parents,
 
     return verts, J_transformed
 
-
 def vertices2joints(J_regressor, vertices):
     ''' Calculates the 3D joint locations from the vertices
 
@@ -264,7 +260,6 @@ def vertices2joints(J_regressor, vertices):
     '''
 
     return torch.einsum('bik,ji->bjk', [vertices, J_regressor])
-
 
 def blend_shapes(betas, shape_disps):
     ''' Calculates the per vertex displacement due to the blend shapes
