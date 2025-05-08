@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import * as THREE from "three";
 
 interface Blendshape {
@@ -37,7 +37,7 @@ export const useBlendshapes = () => {
     const loadBlendshapes = async () => {
       try {
         // Fetch face data from the Python backend
-        const response = await fetch("http://localhost:5000/face-data");
+        const response = await fetch("http://localhost:5001/face-data");
         if (!response.ok) {
           throw new Error("Failed to load face data");
         }
@@ -168,4 +168,3 @@ export const useBlendshapes = () => {
     baseFaces,
   };
 };
-
