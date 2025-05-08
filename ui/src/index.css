@@ -1,0 +1,130 @@
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #666666;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+.loading-container,
+.error-container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #666666;
+  color: #ffffff;
+}
+
+.loading-container p {
+  margin-top: 1rem;
+  font-size: 1.2rem;
+  color: #ffffff;
+}
+
+.error-container {
+  padding: 2rem;
+}
+
+.error-container .uk-alert {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.controller-selector {
+  padding: 0.5rem;
+  background: #444444;
+  border-bottom: 1px solid #555555;
+}
+
+.controller-selector button {
+  margin-right: 0.5rem;
+  background: #555555;
+  color: #ffffff;
+  border: none;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+.controller-selector button.active {
+  background: #0066cc;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.canvas-container {
+  flex: 1;
+  position: relative;
+}
+
+.control-panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 350px;
+  background: var(--mantine-color-dark-7);
+  border-left: 1px solid var(--mantine-color-dark-4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.control-panel-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--mantine-color-dark-4);
+  background: var(--mantine-color-dark-8);
+}
+
+.control-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.slider-group {
+  margin-bottom: 1.5rem;
+}
+
+.slider-group-header {
+  margin: 0 0 0.8rem 0;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--mantine-color-dark-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.slider-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.slider-label {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-gray-5);
+}
+
+.slider-value {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-blue-4);
+  min-width: 3em;
+  text-align: right;
+} 

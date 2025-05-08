@@ -13,7 +13,6 @@ import polyscope.imgui as psim
 PROJ_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
 )
-# PROJ_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
 config = load_config(os.path.join(PROJ_ROOT, "experiments", "10-clusters"))
 model  = load_model(config)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
