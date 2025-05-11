@@ -10,6 +10,118 @@ from flame_utils import FLAME, get_flame_blendshapes
 
 PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 # PROJ_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
+
+class BasicBlendshapesTorch(nn.Module):
+    def __init__(self, V, F, blendshapes, names):
+        super(BasicBlendshapesTorch, self).__init__()
+        # Convert numpy arrays to torch tensors if they aren't already
+        self.V = torch.tensor(V, dtype=torch.float32) if isinstance(V, np.ndarray) else V
+        self.F = F
+        self.blendshapes = torch.tensor(blendshapes, dtype=torch.float32) if isinstance(blendshapes, np.ndarray) else blendshapes
+        
+        # Center vertices at origin
+        self.V = self.V - torch.mean(self.V, dim=0, keepdim=True)
+        
+        self.names = names
+        
+        # Calculate delta (magnitude of displacement for each vertex in each blendshape)
+        self.delta = torch.zeros((self.blendshapes.shape[0], self.V.shape[0]), dtype=torch.float32)
+        for i in range(self.blendshapes.shape[0]):
+            self.delta[i] = torch.norm(self.blendshapes[i], dim=1)
+        
+        # Initialize weights as parameters that can be optimized
+        self.weights = nn.Parameter(torch.zeros(self.blendshapes.shape[0], dtype=torch.float32))
+        
+        # Translation and scale as parameters
+        self.translation = nn.Parameter(torch.zeros(3, dtype=torch.float32))
+        self.scale_factor = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
+        
+        # Compute normals and facing direction
+        # Note: This would typically use a differentiable mesh normal computation
+        # Since igl is not directly compatible with PyTorch, we use the provided normals or compute placeholders
+        if isinstance(V, np.ndarray) and isinstance(F, np.ndarray):
+            try:
+                import igl
+                N = torch.tensor(igl.per_vertex_normals(V, F), dtype=torch.float32)
+            except:
+                # Fallback if igl is not available
+                N = self._compute_vertex_normals()
+        else:
+            N = self._compute_vertex_normals()
+            
+        self.facing_dir = torch.mean(N, dim=0)
+        self.facing_dir = self.facing_dir / torch.norm(self.facing_dir)
+        
+    def _compute_vertex_normals(self):
+        """Basic normal computation fallback if igl is not available"""
+        # This is a simplified version - in practice, you might want to use a differentiable mesh library
+        # or implement proper normal computation
+        device = self.V.device
+        normals = torch.zeros_like(self.V)
+        for face in self.F:
+            v0, v1, v2 = self.V[face[0]], self.V[face[1]], self.V[face[2]]
+            face_normal = torch.cross(v1 - v0, v2 - v0)
+            face_normal = face_normal / (torch.norm(face_normal) + 1e-10)
+            normals[face[0]] += face_normal
+            normals[face[1]] += face_normal
+            normals[face[2]] += face_normal
+        
+        # Normalize vertex normals
+        norms = torch.norm(normals, dim=1, keepdim=True)
+        normals = normals / (norms + 1e-10)
+        return normals
+        
+    def translate(self, delta_pos):
+        """Update translation by delta"""
+        delta_tensor = torch.tensor(delta_pos, dtype=torch.float32, device=self.translation.device) \
+                      if isinstance(delta_pos, np.ndarray) else delta_pos
+        self.translation.data += delta_tensor
+        
+    def scale(self, scaling=1.0):
+        """Set scale factor"""
+        self.scale_factor.data = torch.tensor(scaling, dtype=torch.float32, device=self.scale_factor.device) \
+                               if isinstance(scaling, (int, float)) else scaling
+    
+    def displacement(self, weights=None):
+        """Compute displacement based on weights"""
+        if weights is None:
+            weights = self.weights
+        
+        # Reshape blendshapes for matrix multiplication
+        bs_reshaped = self.blendshapes.reshape(weights.shape[0], -1)
+        # Compute weighted displacement
+        disp = torch.matmul(weights, bs_reshaped).reshape(self.V.shape[0], 3)
+        return disp
+
+    def eval(self, weights=None):
+        """Evaluate the model with optional weights"""
+        if weights is None:
+            weights = self.weights
+            
+        # Get base mesh and apply displacements
+        V = self.V.clone()
+        V = V + self.displacement(weights)
+        
+        # Apply scale and translation
+        V = V * self.scale_factor
+        V = V + self.translation
+        
+        return V
+
+    def facing_dire(self):
+        """Return facing direction (typo preserved from original)"""
+        return self.facing_dir
+    
+    def forward(self, weights=None):
+        """Forward pass for nn.Module compatibility"""
+        return self.eval(weights)
+    
+    def __len__(self):
+        return self.blendshapes.shape[0]
+    
+    def __getitem__(self, idx):
+        return self.blendshapes[idx]
+
 class BasicBlendshapes:
     def __init__(self, V, F, blenshapes, names):
         # V = (# of vertices, 3)

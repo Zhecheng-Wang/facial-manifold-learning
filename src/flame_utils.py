@@ -662,6 +662,29 @@ class FLAME(nn.Module):
                                          self.full_lmk_faces_idx.repeat(vertices.shape[0], 1),
                                          self.full_lmk_bary_coords.repeat(vertices.shape[0], 1, 1))
         return landmarks3d
+    def grad(self, loss=None, shape_params=None, expression_params=None, pose_params=None, eye_pose_params=None):
+        """
+        Set the gradients of the parameters to zero
+        """
+        grad_shape = torch.autograd.grad(loss, [shape_params],
+                                   retain_graph=True, create_graph=True)
+        
+        grad_expression = torch.autograd.grad(loss, [expression_params],
+                                      retain_graph=True, create_graph=True)
+        
+        grad_pose = torch.autograd.grad(loss, [pose_params],
+                                      retain_graph=True, create_graph=True)
+        
+        grad_eye_pose = torch.autograd.grad(loss, [eye_pose_params],
+                                        retain_graph=True, create_graph=True)
+        
+        grad = {"shape_params": grad_shape[0],
+                "expression_params": grad_expression[0],
+                "pose_params": grad_pose[0],
+                "eye_pose_params": grad_eye_pose[0]}
+        
+        return grad
+
 
     def forward(self, shape_params=None, expression_params=None, pose_params=None, eye_pose_params=None, pose2rot=True,
                 ignore_global_rot=False, return_lm2d=True, return_lm3d=True):

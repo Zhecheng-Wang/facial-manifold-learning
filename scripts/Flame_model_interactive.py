@@ -1,6 +1,8 @@
 import os
 import numpy as np
 import torch
+import sys
+sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/src")
 from utils import load_blendshape, SPDataset, load_config
 from clustering import compute_jaccard_similarity
 from model import load_model
@@ -101,7 +103,7 @@ def gui():
 
     # ------------------------------------------------ Blendshape sliders
     for i, name in enumerate(blendshapes.names):
-        changed_bs, new_val = psim.SliderFloat(name, float(weights[i]), -1, 1.0)
+        changed_bs, new_val = psim.SliderFloat(name, float(weights[i]), -3.0, 3.0)
         if changed_bs:
             last_slider_index = i
             weights[i]        = new_val                 # keep user edit
@@ -109,7 +111,6 @@ def gui():
             # w_pred[i]         = new_val                 # protect edited coef
             weights[:]        = w_pred
             SM0.update_vertex_positions(blendshapes.eval(weights))
-
 
 # ---------------------------------------------------------------------
 ps.set_user_callback(gui)
