@@ -3,15 +3,12 @@ import json
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
+from numpy.typing import NDArray
 import seaborn as sns
-<<<<<<< HEAD
-from blendshapes import BasicBlendshapes
-=======
-import matplotlib.font_manager as fm
 from blendshapes import BasicBlendshapes, FLAMEBlendshapes
->>>>>>> evan
 import igl
 import pandas as pd
+import pickle
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -257,10 +254,10 @@ def parse_SP_txt(txt_path):
     return df
 
 
-def parse_SP_dataset(dataset_path):
+def parse_SP_dataset(dataset_path: str) -> NDArray[np.float32]:
     bin_dataset_path = os.path.join(dataset_path, "data.npy")
     if not os.path.exists(bin_dataset_path):
-        sequences = []
+        sequences: list[str] = []
         # make a empty data frame
         df = pd.DataFrame()
         for root, _, files in os.walk(dataset_path):
@@ -306,24 +303,57 @@ def load_smote_dataset(cluster_n=15, alpha_and_mask=False):
     )
     return smote_dataset
 
-<<<<<<< HEAD
-=======
-# def load_mead_ravdess_dataset():
 
->>>>>>> evan
+def load_mead_ravdess_dataset(
+    dataset_dir_path: str, ani_num: str
+) -> dict[str, NDArray[np.float32]]:
+    print("Loading MEAD-RAVDESS dataset...")
+    dataset_path = os.path.join(dataset_dir_path, "val_mead_ravdess_0.1.pickle")
+    if not os.path.exists(dataset_path):
+        raise FileNotFoundError(f"Dataset not found at {dataset_path}")
+    with open(dataset_path, "rb") as f:
+        dataset = pickle.load(f, encoding="latin1")
+
+    data: dict[str, NDArray[np.float32]] = dataset[ani_num]
+    explore(data)
+    return data
+
 
 class SPDataset(Dataset):
     def __init__(self):
         dataset_path = os.path.join(PROJ_ROOT, "data", "SP", "dataset")
-        self.data = parse_SP_dataset(dataset_path)
-        self.n_frames = self.data.shape[0]
-        self.data = torch.from_numpy(self.data).to(torch.float32)
+        dataset = parse_SP_dataset(dataset_path)
+        self.n_frames = dataset.shape[0]
+        self.data = torch.from_numpy(dataset).to(torch.float32)
 
     def __len__(self):
         return self.n_frames
 
     def __getitem__(self, idx):
         return self.data[idx]
+
+
+class MeadRavdessDataset(Dataset):
+    _dataset: dict[str, NDArray[np.float32]]
+    _keys: list[str]
+
+    def __init__(self, ani_num: str = "01-01-05-02-02-02-07"):
+        # /Users/joonho/workspace/research/facial-manifold-learning/data/mead_ravdess/val_mead_ravdess_0.1.pickle
+        dataset_path = os.path.join(PROJ_ROOT, "data", "mead_ravdess")
+        self._dataset = load_mead_ravdess_dataset(dataset_path, ani_num)
+        self._keys = list(self._dataset.keys())
+
+    def __len__(self):
+        return self._dataset["jaw"].shape[1]
+
+    def keys(self) -> list[str]:
+        return self._keys
+
+    def __getitem__(self, idx: int):
+        ret: dict[str, NDArray[np.float32]] = {}
+        for k in sorted(["shape", "exp", "global_pose", "jaw"]):
+            ret[k] = self._dataset[k][0, idx, :]
+        return ret
 
 
 class DynamicMaskDataset(Dataset):
@@ -377,3 +407,40 @@ def model_exists(path):
 
 def compute_error(weights, weights_gt):
     return np.linalg.norm(weights - weights_gt, axis=1).mean()
+
+
+def explore(obj, depth=0):
+    """View the structure of dictionaries (pickles)."""
+    indent = "  " * depth
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            print(f"{indent}{k}: {type(v)}")
+            explore(v, depth + 1)
+    elif isinstance(obj, list):
+        print(f"{indent}List[{len(obj)}] of {type(obj[0])}")
+        explore(obj[0], depth + 1)
+    elif hasattr(obj, "shape"):
+        print(f"{indent}ndarray shape: {obj.shape}")
+    else:
+        print(f"{indent}{type(obj)}")
+
+
+def inspect_attrs(obj):
+    for attr_name in dir(obj):
+        if attr_name.startswith("_"):
+            continue  # Skip private/internal
+
+        try:
+            value = getattr(obj, attr_name)
+        except Exception:
+            continue  # Skip if property raises an error
+
+        type_name = type(value).__name__
+
+        shape = ""
+        if hasattr(value, "shape"):
+            shape = f"shape={value.shape}"
+        elif isinstance(value, (list, tuple)):
+            shape = f"len={len(value)}"
+
+        print(f"{attr_name:25s} : {type_name:15s} {shape}")

@@ -8,3 +8,5 @@ tensorboard
 seaborn
 tqdm
 ipykernel
+chumpy @ git+https://github.com/mattloper/chumpy@9b045ff5d6588a24a0bab52c83f032e2ba433e17
+
