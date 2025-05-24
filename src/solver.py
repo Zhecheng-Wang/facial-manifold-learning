@@ -8,16 +8,6 @@ from torch import Tensor
 ND32: TypeAlias = torch.Tensor
 
 
-ND32: TypeAlias = Tensor
-
-
-import torch
-from torch import Tensor
-from typing import Callable, TypeAlias
-
-ND32: TypeAlias = Tensor
-
-
 class LeastSquaresSolverVanilla:
     """Least squares solver for blendshape fitting."""
 
@@ -135,7 +125,7 @@ class GradientSolverSciPy:
         supplying exact gradients via PyTorch autograd.
         """
         # Move target to a fixed torch tensor
-        target_t = target.detach()
+        target_t = torch.from_numpy(target)
 
         def fun_and_grad(z_np: np.ndarray):
             # Convert to torch tensor, enable grad
@@ -172,14 +162,14 @@ class GradientSolverSciPy:
             jac=jac,
             bounds=[(-3.0, 3.0)] * self.z_shape,
             method="L-BFGS-B",  # supports bounds & uses gradient
-            options={"ftol": 1e-6, "gtol": 1e-6, "maxiter": 1000, "disp": verbose},
+            options={"ftol": 1e-6, "gtol": 1e-6, "maxiter": 2000, "disp": verbose},
         )
 
         return res.x
 
 
 class LeastSquaresSolver:
-    def __init__(self, z_shape: int, lr=1e-1, steps=100, opt_name: str = "sgd"):
+    def __init__(self, z_shape: int, lr=1e-1, steps=100, opt_name: str = "s"):
         self.z_shape = z_shape
         self.lr = lr
         self.steps = steps
@@ -192,7 +182,7 @@ class LeastSquaresSolver:
         z = torch.nn.Parameter(
             torch.zeros(self.z_shape, dtype=torch.float32, device=target.device)
         )
-        target_t = target.to(z.device)
+        target_t = torch.from_numpy(target).to(z.device)
 
         # pick optimizer (or None for pure GD)
         optimizer = None
@@ -240,12 +230,12 @@ class LeastSquaresSolver:
                 with torch.no_grad():
                     z.data -= self.lr * z.grad
 
-            if verbose and (i % 10 == 0 or i == self.steps - 1):
-                z_cpu = z.detach().cpu()
-                print(
-                    f"[iter {i:03d}]  loss={loss:.12f}, "
-                    f"max={z_cpu.max():.4f}, "
-                    f"‖grad‖={z.grad.norm():.24f}"
-                )
+            # if verbose and (i % 10 == 0 or i == self.steps - 1):
+            #     z_cpu = z.detach().cpu()
+            #     print(
+            #         f"[iter {i:03d}]  loss={loss:.12f}, "
+            #         f"max={z_cpu.max():.4f}, "
+            #         f"‖grad‖={z.grad.norm():.24f}"
+            #     )
 
-        return z.detach().cpu().numpy()
+        return z.detach()

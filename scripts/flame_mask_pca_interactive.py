@@ -1,4 +1,11 @@
-import os
+import os, sys
+
+# assumes scripts/ and src/ are siblings under your project root
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+SRC_DIR = os.path.join(PROJECT_ROOT, "src")
+sys.path.insert(0, SRC_DIR)
+
+
 import glob
 import pickle
 from typing import List
@@ -21,6 +28,7 @@ class PCAAnimationViewer:
         self.proj_root = os.path.abspath(
             os.path.join(os.path.dirname(__file__), os.pardir)
         )
+
         # Load model and blendshapes
         config = load_config(os.path.join(self.proj_root, "experiments", "rinat_small"))
         model = load_model(config)

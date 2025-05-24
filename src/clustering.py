@@ -1,10 +1,11 @@
 import numpy as np
 from blendshapes import BasicBlendshapes
-from utils import load_blendshape
+from data.utils import load_blendshape
 import polyscope as ps
 from matplotlib import pyplot as plt
 
-def compute_ruzicka_similarity(blendshapes:BasicBlendshapes):
+
+def compute_ruzicka_similarity(blendshapes: BasicBlendshapes):
     """compute Ruzicka similarity between blendshapes
     Args:
         blendshapes (BasicBlendshapes): blendshape model
@@ -19,31 +20,44 @@ def compute_ruzicka_similarity(blendshapes:BasicBlendshapes):
     similarity = np.zeros((n_blendshapes, n_blendshapes))
     for i in range(n_blendshapes):
         similarity[i, i] = 1.0
-        for j in range(i+1, n_blendshapes):
-            similarity[i, j] = np.sum(np.minimum(blendshapes_norm[i], blendshapes_norm[j])) / np.sum(np.maximum(blendshapes_norm[i], blendshapes_norm[j]))
+        for j in range(i + 1, n_blendshapes):
+            similarity[i, j] = np.sum(
+                np.minimum(blendshapes_norm[i], blendshapes_norm[j])
+            ) / np.sum(np.maximum(blendshapes_norm[i], blendshapes_norm[j]))
             similarity[j, i] = similarity[i, j]
     return similarity
 
-def compute_maximum_deformation_position_similarity(blendshapes:BasicBlendshapes):
+
+def compute_maximum_deformation_position_similarity(blendshapes: BasicBlendshapes):
     n_blendshapes = len(blendshapes)
-    blend_shape_maximum_deformation_position = np.mean(blendshapes.blendshapes + np.expand_dims(blendshapes.V, axis=0), axis=1)
+    blend_shape_maximum_deformation_position = np.mean(
+        blendshapes.blendshapes + np.expand_dims(blendshapes.V, axis=0), axis=1
+    )
     # reflected
-    reflected_blend_shape_maximum_deformation_position = blend_shape_maximum_deformation_position.copy()
-    reflected_blend_shape_maximum_deformation_position[:, 1] = -reflected_blend_shape_maximum_deformation_position[:, 1]
+    reflected_blend_shape_maximum_deformation_position = (
+        blend_shape_maximum_deformation_position.copy()
+    )
+    reflected_blend_shape_maximum_deformation_position[:, 1] = (
+        -reflected_blend_shape_maximum_deformation_position[:, 1]
+    )
     # compluete similarity matrix
     similarity = np.zeros((n_blendshapes, n_blendshapes))
     for i in range(n_blendshapes):
         similarity[i, i] = 1.0
-        for j in range(i+1, n_blendshapes):
-            similarity_ij = np.linalg.norm(blend_shape_maximum_deformation_position[i] - blend_shape_maximum_deformation_position[j])
+        for j in range(i + 1, n_blendshapes):
+            similarity_ij = np.linalg.norm(
+                blend_shape_maximum_deformation_position[i]
+                - blend_shape_maximum_deformation_position[j]
+            )
             # similarity_ij_reflected = np.linalg.norm(blend_shape_maximum_deformation_position[i] - reflected_blend_shape_maximum_deformation_position[j])
             # similarity[i, j] = np.max([similarity_ij, similarity_ij_reflected])
             similarity[i, j] = similarity_ij
             similarity[j, i] = similarity[i, j]
-    similarity = similarity/np.max(similarity)
+    similarity = similarity / np.max(similarity)
     return similarity
 
-def compute_jaccard_similarity(blendshapes:BasicBlendshapes, threshold=0.1, sym=False):
+
+def compute_jaccard_similarity(blendshapes: BasicBlendshapes, threshold=0.1, sym=False):
     """compute Jaccard similarity between blendshapes
     Args:
         blendshapes (BasicBlendshapes): blendshape model
@@ -57,7 +71,9 @@ def compute_jaccard_similarity(blendshapes:BasicBlendshapes, threshold=0.1, sym=
     if sym:
         reflected_bs = blendshapes.copy()
         reflected_bs[:, :, 0] *= -1
-        blendshapes_norm = np.linalg.norm((blendshapes.blendshapes + reflected_bs)/2, axis=2)
+        blendshapes_norm = np.linalg.norm(
+            (blendshapes.blendshapes + reflected_bs) / 2, axis=2
+        )
     else:
         blendshapes_norm = np.linalg.norm(blendshapes.blendshapes, axis=2)
     blendshapes_activation = blendshapes_norm > threshold
@@ -65,16 +81,23 @@ def compute_jaccard_similarity(blendshapes:BasicBlendshapes, threshold=0.1, sym=
     similarity = np.zeros((n_blendshapes, n_blendshapes))
     for i in range(n_blendshapes):
         similarity[i, i] = 1.0
-        for j in range(i+1, n_blendshapes):
+        for j in range(i + 1, n_blendshapes):
             if not sym:
-                similarity[i, j] = np.sum(blendshapes_activation[i] & blendshapes_activation[j]) / np.sum(blendshapes_activation[i] | blendshapes_activation[j])
+                similarity[i, j] = np.sum(
+                    blendshapes_activation[i] & blendshapes_activation[j]
+                ) / np.sum(blendshapes_activation[i] | blendshapes_activation[j])
             else:
-                similarity = np.sum(blendshapes_activation[i] & blendshapes_activation[j]) / np.sum(blendshapes_activation[i] | blendshapes_activation[j])
+                similarity = np.sum(
+                    blendshapes_activation[i] & blendshapes_activation[j]
+                ) / np.sum(blendshapes_activation[i] | blendshapes_activation[j])
                 # sym_similarity = np.sum(blendshapes_activation[i] & blendshapes_activation[j]) / np.sum(blendshapes_activation[i] | blendshapes_activation[j]
             similarity[j, i] = similarity[i, j]
     return similarity
 
-def cluster_blendshapes(blendshapes:BasicBlendshapes, cluster_threshold=0.25, activate_threshold=0.1):
+
+def cluster_blendshapes(
+    blendshapes: BasicBlendshapes, cluster_threshold=0.25, activate_threshold=0.1
+):
     """cluster blendshapes based on IoU between regions of influence, only return clusters without mirror symmetry
     Args:
         blendshapes (BasicBlendshapes): blendshape model
@@ -89,7 +112,7 @@ def cluster_blendshapes(blendshapes:BasicBlendshapes, cluster_threshold=0.25, ac
 
     # compute displacement magnitude for each blendshape
     blendshapes_norm = np.linalg.norm(blendshapes.blendshapes, axis=2)
-    
+
     # # find symmetric blendshapes
     # symmetric_blendshapes = defaultdict(list)
     # for i in range(n_blendshapes):
@@ -109,7 +132,7 @@ def cluster_blendshapes(blendshapes:BasicBlendshapes, cluster_threshold=0.25, ac
     #             symmetric_blendshapes[i].append(j)
     #             symmetric_blendshapes[j].append(i)
     # print(f"Found {len(symmetric_blendshapes)} symmetric blendshapes.")
-    
+
     # # fit k-means to cluster blendshapes
     # from sklearn.cluster import KMeans
     # n_clusters = 8
@@ -118,7 +141,7 @@ def cluster_blendshapes(blendshapes:BasicBlendshapes, cluster_threshold=0.25, ac
     # for i in range(n_clusters):
     #     clusters.append(np.where(kmeans.labels_ == i)[0])
     # return clusters
-    
+
     # # fit spectral clustering to cluster blendshapes
     # from sklearn.cluster import SpectralClustering
     # n_clusters = 8
@@ -142,7 +165,7 @@ def cluster_blendshapes(blendshapes:BasicBlendshapes, cluster_threshold=0.25, ac
     #     for j in range(i+1, regions.shape[0]):
     #         IoU[i, j] = np.sum(regions[i] & regions[j]) / np.sum(regions[i] | regions[j])
     #         IoU[j, i] = IoU[i, j]
-    
+
     # # cluster blendshapes, walk through the IoU matrix until found all clusters
     # clusters = []
     # # sort the sum of IoU for each blendshape
@@ -167,13 +190,13 @@ def cluster_blendshapes(blendshapes:BasicBlendshapes, cluster_threshold=0.25, ac
     #                 cluster.append(j)
     #                 Q.append(j)
     #     clusters.append(cluster)
-    
+
     # Ruzicka similarity
     # IoU = compute_ruzicka_similarity(blendshapes)
     IoU = compute_jaccard_similarity(blendshapes, threshold=activate_threshold)
-    
+
     # zero out the bottom activate_threshold%
-    cutoff = np.percentile(IoU, activate_threshold*100)
+    cutoff = np.percentile(IoU, activate_threshold * 100)
     IoU[IoU < cutoff] = 0.0
     cluster_cutoff = np.max(IoU) * cluster_threshold
     # cluster blendshapes, walk through the IoU matrix until found all clusters
@@ -203,11 +226,11 @@ def cluster_blendshapes(blendshapes:BasicBlendshapes, cluster_threshold=0.25, ac
                     #     cluster.extend(symmetric_blendshapes[j])
                     Q.append(j)
         clusters.append(cluster)
-    
+
     return clusters
 
 
-def cluster_blendshapes_kmeans(blendshapes:BasicBlendshapes, m_clusters_max=8):
+def cluster_blendshapes_kmeans(blendshapes: BasicBlendshapes, m_clusters_max=8):
     """cluster blendshapes based on k-means
     Args:
         blendshapes (BasicBlendshapes): blendshape model
@@ -219,6 +242,7 @@ def cluster_blendshapes_kmeans(blendshapes:BasicBlendshapes, m_clusters_max=8):
     n_blendshapes = len(blendshapes)
     # fit k-means to cluster blendshapes
     from sklearn.cluster import KMeans
+
     IOU = compute_jaccard_similarity(blendshapes)
     clusters_n = []
     clusters_n_intra_cluster_distance = []
@@ -238,7 +262,11 @@ def cluster_blendshapes_kmeans(blendshapes:BasicBlendshapes, m_clusters_max=8):
     # find the elbow point
     elbow_point = -1
     for i in range(1, len(clusters_n_intra_cluster_distance)):
-        if clusters_n_intra_cluster_distance[i] - clusters_n_intra_cluster_distance[i-1] > 0:
+        if (
+            clusters_n_intra_cluster_distance[i]
+            - clusters_n_intra_cluster_distance[i - 1]
+            > 0
+        ):
             elbow_point = i
             break
     if elbow_point == -1:
@@ -251,7 +279,10 @@ def cluster_blendshapes_kmeans(blendshapes:BasicBlendshapes, m_clusters_max=8):
         clusters_list.append(list(cluster_arr[i]))
     return clusters_list
 
-def cluster_blendshapes_ec8ec1a(blendshapes:BasicBlendshapes, cluster_threshold=0.25, activate_threshold=0.1):
+
+def cluster_blendshapes_ec8ec1a(
+    blendshapes: BasicBlendshapes, cluster_threshold=0.25, activate_threshold=0.1
+):
     """cluster blendshapes based on IoU between regions of influence, only return clusters without mirror symmetry
     Args:
         blendshapes (BasicBlendshapes): blendshape model
@@ -300,10 +331,12 @@ def cluster_blendshapes_ec8ec1a(blendshapes:BasicBlendshapes, cluster_threshold=
     # compute IoU between blendshapes
     IoU = np.zeros((regions.shape[0], regions.shape[0]))
     for i in range(regions.shape[0]):
-        for j in range(i+1, regions.shape[0]):
-            IoU[i, j] = np.sum(regions[i] & regions[j]) / np.sum(regions[i] | regions[j])
+        for j in range(i + 1, regions.shape[0]):
+            IoU[i, j] = np.sum(regions[i] & regions[j]) / np.sum(
+                regions[i] | regions[j]
+            )
             IoU[j, i] = IoU[i, j]
-    
+
     # cluster blendshapes, walk through the IoU matrix until found all clusters
     clusters = []
     # sort the sum of IoU for each blendshape
@@ -340,18 +373,19 @@ def cluster_blendshapes_ec8ec1a(blendshapes:BasicBlendshapes, cluster_threshold=
     # return clusters, symmetric_blendshapes
     return clusters
 
+
 if __name__ == "__main__":
     # load the blendshape model
     import os
+
     PROJ_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
     blendshapes = load_blendshape(model="SP")
     # compute clusters
     import time
+
     start_time = time.time()
     # clusters = cluster_blendshapes(blendshapes, cluster_threshold=0.05, activate_threshold=0.2)
     clusters = cluster_blendshapes_kmeans(blendshapes, m_clusters_max=6)
-
-    
 
     end_time = time.time()
     print(f"Clustering took {end_time - start_time} seconds.")
@@ -359,6 +393,7 @@ if __name__ == "__main__":
 
     # plot the clusters as heatmap
     import matplotlib.pyplot as plt
+
     # plot the similarity matrix
     # similarity = compute_jaccard_similarity(blendshapes)
     # plt.subplot(2, 1, 1)
@@ -383,9 +418,9 @@ if __name__ == "__main__":
     # plt.imshow(heat_matrix, cmap="tab20")
     # plt.show()
 
-
     # visualize clusters
     import polyscope as ps
+
     ps.init()
     ps.set_program_name("Clustering Visualization")
     ps.set_verbosity(0)
@@ -397,7 +432,7 @@ if __name__ == "__main__":
     ps.set_autoscale_structures(False)
     ps.set_front_dir("z_front")
     # compute the bounding box of the model
-    bounding_box = (np.max(blendshapes.V, axis=0) - np.min(blendshapes.V, axis=0))*1.2
+    bounding_box = (np.max(blendshapes.V, axis=0) - np.min(blendshapes.V, axis=0)) * 1.2
     count = 0
     for i in clusters:
         for j in i:
@@ -407,7 +442,9 @@ if __name__ == "__main__":
         for i, blendshape in enumerate(cluster):
             D = np.linalg.norm(blendshapes[blendshape], axis=1) / 100
             V = blendshapes.V + blendshapes[blendshape]
-            cluster_i = ps.register_surface_mesh(f"{blendshape}", V, blendshapes.F, smooth_shade=True)
+            cluster_i = ps.register_surface_mesh(
+                f"{blendshape}", V, blendshapes.F, smooth_shade=True
+            )
             cluster_i.add_scalar_quantity("displacement", D, enabled=True, cmap="turbo")
             cluster_i.add_to_group(group)
             transform = np.zeros(3)

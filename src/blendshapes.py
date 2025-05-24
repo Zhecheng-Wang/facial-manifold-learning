@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import numpy.typing as npt
 import igl
 import torch
 from types import SimpleNamespace
@@ -42,7 +43,7 @@ class BasicBlendshapes:
             self.V.shape[0], 3
         )
 
-    def eval(self, weights=None):
+    def eval(self, weights=None) -> npt.NDArray[np.float32]:
         V = self.V.copy()
         if weights is None:
             weights = self.weights
@@ -175,7 +176,7 @@ class FLAMEBlendshapes:
         #     .to(self.flame.device)
         # )
 
-    def eval(self, weights=None):
+    def eval(self, weights=None) -> torch.Tensor:
         if weights is None:
             weights = self.weights
 
@@ -204,7 +205,7 @@ class FLAMEBlendshapes:
     def __len__(self):
         return self.blendshapes.shape[0]
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int):
         return self.blendshapes[idx]
 
 

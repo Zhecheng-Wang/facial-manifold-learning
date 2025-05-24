@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from clustering import compute_jaccard_similarity
-from utils import load_blendshape
+from data.utils import load_blendshape
 
 
 # Utility: one-hot encoding function

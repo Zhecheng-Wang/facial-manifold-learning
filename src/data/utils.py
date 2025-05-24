@@ -1,26 +1,22 @@
-import os
 import json
-import numpy as np
-import torch
-from torch.utils.data import Dataset, DataLoader
-from numpy.typing import NDArray
-import seaborn as sns
-from blendshapes import BasicBlendshapes, FLAMEBlendshapes
-import igl
-import pandas as pd
+import os
 import pickle
-import sys
 
-sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir))
-# sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration")
-from scripts.SMOTE import *
+import igl
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import torch
+from numpy.typing import NDArray
+from torch.utils.data import DataLoader, Dataset
 
+from blendshapes import BasicBlendshapes, FLAMEBlendshapes
 
-PROJ_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-# PROJ_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
+# go up two directories from this file
+PROJ_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print(f"PROJ_ROOT: {PROJ_ROOT}")
+
 path = f'{os.path.expanduser("~")}/.local/share/fonts/LinBiolinum_R.ttf'
-# biolinum_font = fm.FontProperties(fname=path)
-# sns.set(font=biolinum_font.get_name())
 sns.set_theme()
 
 
@@ -102,7 +98,7 @@ def load_ARKit_blendshape():
     return BasicBlendshapes(V, F, blendshapes, blendshape_names)
 
 
-def load_SP_blendshape():
+def load_SP_blendshape() -> BasicBlendshapes:
     path = os.path.join(PROJ_ROOT, "data", "SP", "blendshapes")
     valid_names_path = os.path.join(path, "valid_names.txt")
     V, F = igl.read_triangle_mesh(os.path.join(path, "neutral.obj"))
