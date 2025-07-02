@@ -608,7 +608,8 @@ class FLAME(nn.Module):
             neck_kin_chain.append(curr_idx)
             curr_idx = self.parents[curr_idx]
         self.register_buffer('neck_kin_chain', torch.stack(neck_kin_chain))
-
+        self.to(self.device)
+        
     def _find_dynamic_lmk_idx_and_bcoords(self, pose, dynamic_lmk_faces_idx,
                                           dynamic_lmk_b_coords,
                                           neck_kin_chain, dtype=torch.float32, pose2rot=True):
@@ -707,7 +708,7 @@ class FLAME(nn.Module):
                 pose_params = self.eye_pose.expand(batch_size, -1)
             if eye_pose_params is None:
                 eye_pose_params = self.eye_pose.expand(batch_size, -1)
-            head_pose = pose_params[:, :3] if not ignore_global_rot else torch.zeros_like(pose_params[:, :3])
+            head_pose = pose_params[:, :3] if not ignore_global_rot else torch.zeros_like(pose_params[:, :3]).to(self.device)
             full_pose = torch.cat(
                 [head_pose, self.neck_pose.expand(batch_size, -1), pose_params[:, 3:], eye_pose_params], dim=1)
         else:

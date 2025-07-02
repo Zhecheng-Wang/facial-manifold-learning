@@ -199,7 +199,7 @@ class FLAMEBlendshapes:
         self.pose_params = torch.zeros([1, 3]).to(self.flame.device)
         self.jaw_params = torch.zeros([1, 3]).to(self.flame.device)
         self.eye_pose_params = torch.zeros([1, 6]).to(self.flame.device)
-
+        
         vertices, landmarks2d, landmarks3d = self.flame(self.shape_params, self.exp_params, pose_params=torch.concat([self.pose_params, self.jaw_params], dim=1))
 
         
