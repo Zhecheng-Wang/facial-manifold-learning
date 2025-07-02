@@ -191,7 +191,7 @@ BATCH_SIZE = 128  # Adjust based on your GPU memory
 LEARNING_RATE = 0.1
 NUM_ITERATIONS = 100
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")        
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")        
 print(f"Using device: {device}")
 
 flame = FLAMEBlendshapes()
@@ -229,7 +229,9 @@ data_keys = list(data.keys())
  
 # get 200 sample
 np.random.seed(42)  # for reproducibility
-random_indices = np.random.choice(len(data_keys), 200, replace=False).tolist()
+# random_indices = np.random.choice(len(data_keys), 200, replace=False).tolist()
+# use all samples
+random_indices = np.arange(len(data_keys)).tolist()  # use all samples
 samples = []
 exp = []
 jaw = []
@@ -305,7 +307,7 @@ for feature in facial_landmark_groups_keys:
     v_sample_i_optimized = np.concatenate(v_sample_i_optimized, axis=0)
 
     # save the optimized weight
-    save_dir = os.path.join(ROOT, f"experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_200_videos/")
+    save_dir = os.path.join(ROOT, f"experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_ALL_videos/")
     os.makedirs(save_dir, exist_ok=True)
     partially_frozened_model_weights = os.path.join(save_dir, "bs_for_{}".format(feature + ".npy"))
     np.save(partially_frozened_model_weights, optimized_weight)
