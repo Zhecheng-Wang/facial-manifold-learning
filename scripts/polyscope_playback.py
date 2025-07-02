@@ -99,7 +99,7 @@ class MeshAnimator:
         ps.show()
 
 class MultiMeshAnimator:
-    def __init__(self, mesh_data, offset_distance=3.0):
+    def __init__(self, mesh_data, offset_distance=0.0):
         """
         Initialize the multi-mesh animator.
         
@@ -128,6 +128,7 @@ class MultiMeshAnimator:
         # Initialize polyscope
         ps.set_verbosity(0)
         ps.init()
+        ps.remove_all_structures()
         ps.set_ground_plane_mode("none")
         ps.set_view_projection_mode("orthographic")
         ps.set_front_dir("z_front")
@@ -169,7 +170,7 @@ class MultiMeshAnimator:
         if all_vertices:
             all_vertices = np.concatenate(all_vertices, axis=0)
             center = np.mean(all_vertices, axis=0)
-            extent = np.max(np.abs(all_vertices - center)) * 1.5
+            # extent = np.max(np.abs(all_vertices - center)) * 1.5
             
             ps.reset_camera_to_home_view()
             ps.look_at(center, center + np.array([0, -1, 0]))

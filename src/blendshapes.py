@@ -21,7 +21,7 @@ class BasicBlendshapesTorch(nn.Module):
         
         # Center vertices at origin
         self.V = self.V - torch.mean(self.V, dim=0, keepdim=True)
-        
+        self.V_cache = self.V.clone()  # Cache the neutral pose vertices
         self.names = names
         
         # Calculate delta (magnitude of displacement for each vertex in each blendshape)
@@ -105,7 +105,7 @@ class BasicBlendshapesTorch(nn.Module):
         # Apply scale and translation
         V = V * self.scale_factor
         V = V + self.translation
-        
+        self.V_cache = V.clone()  # Cache the current vertices after evaluation
         return V
 
     def facing_dire(self):
@@ -129,6 +129,7 @@ class BasicBlendshapes:
         # blenshapes = (# of blendshapes, # of vertices, 3)
         self.V = V # this is also the neutral pose
         self.V -= np.mean(self.V, axis=0)
+        self.V_cache = self.V.copy()  # Cache the neutral pose vertices
         self.F = F
         self.blendshapes = blenshapes
         self.names = names
@@ -160,6 +161,7 @@ class BasicBlendshapes:
         V += self.displacement(weights)
         V *= self.scale_factor
         V += self.translation
+        self.V_cache = V.copy()  # Cache the current vertices after evaluation
         return V
 
     def facing_dire(self):
@@ -183,6 +185,8 @@ class FLAMEBlendshapes:
                 tex_path=os.path.join(PROJ_ROOT, "data/flame_model/FLAME2020/FLAME_albedo_from_BFM.npz"),
                 flame_lmk_embedding_path=os.path.join(PROJ_ROOT, "data/flame_model/landmark_embedding.npy"),
             )
+        self.n_exp = 100
+        self.n_shape = 100
         self.FLAMEConfig = FLAMEConfig
         self.flame = FLAME(FLAMEConfig)
         F_flame_path = os.path.join(PROJ_ROOT, "data/flame_model/faces_flame.pickle")
@@ -212,7 +216,7 @@ class FLAMEBlendshapes:
 
         self.V = self.blendshape_mean
         self.V = self.V - np.mean(self.V, axis=0)
-
+        self.V_cache = self.V.copy()  # Cache the neutral pose vertices
         # get all the blendshapes    
         self.blendshapes = np.concatenate([self.blendshape_exp + self.blendshape_mean, self.blendshapes_jaw + self.blendshape_mean], axis=0)
 
@@ -220,12 +224,14 @@ class FLAMEBlendshapes:
         for i in range(self.blendshapes.shape[0]):
             self.delta[i] = np.linalg.norm(self.blendshapes[i], axis=1)
         self.weights = np.zeros(self.blendshapes.shape[0])
-        self.translation = np.array([0, 0, 0])
+        self.translation = np.array([0, 0, 0], dtype=np.float32)
         self.scale_factor = 1
         N = igl.per_vertex_normals(self.V, self.F)
         self.facing_dir = np.mean(N, axis=0)
         self.facing_dir /= np.linalg.norm(self.facing_dir)
 
+    def get_landmark_indices(self):
+        return self.flame.full_lmk_faces_idx
     def translate(self, delta_pos):
         self.translation += np.array(delta_pos)
 
@@ -240,14 +246,22 @@ class FLAMEBlendshapes:
         self.jaw_params = torch.from_numpy(weights[self.FLAMEConfig.n_exp:]).float().unsqueeze(0).to(self.flame.device)
         return
     
-    def eval(self, weights=None):
+    def eval(self, weights=None, return_landmarks=False):
         self.displacement(weights) # update the parameter if it changes        
         vertices, landmarks2d, landmarks3d = self.flame(self.shape_params, self.exp_params, pose_params=torch.concat([self.pose_params, self.jaw_params], dim=1))
         V = vertices[0].cpu().numpy()
         V = V - np.mean(self.V, axis=0)
         V *= self.scale_factor
         V += self.translation
-        return V
+        self.V_cache = V.copy()  # Cache the current vertices after evaluation
+        if return_landmarks:
+            landmarks3d = landmarks3d[0].cpu().numpy()
+            landmarks3d = landmarks3d - np.mean(self.V, axis=0)
+            landmarks3d *= self.scale_factor
+            landmarks3d += self.translation
+            return V, landmarks3d
+        else:
+           return V
     
     def facing_dire(self):
         return self.facing_dir
@@ -256,7 +270,6 @@ class FLAMEBlendshapes:
     def __getitem__(self, idx):
         return self.blendshapes[idx]
     
-
 if __name__ == "__main__":
     flameBS = FLAMEBlendshapes()
     V = flameBS.eval()   
