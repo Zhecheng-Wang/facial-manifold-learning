@@ -35,7 +35,7 @@ flame = FLAMEBlendshapes()
 for feature in masks_we_care_about:
     print("feature: ", feature)
     V_for_feature_i = []
-    partially_frozened_model_weights = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test_freeze_landmarks/bs_for_" + feature + ".npy"
+    partially_frozened_model_weights = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test_freeze_landmarks_and_5_ajacent_test/bs_for_" + feature + ".npy"
     try:
         optimized_weight_for_feature_i = np.load(partially_frozened_model_weights)[:1000]
     except:

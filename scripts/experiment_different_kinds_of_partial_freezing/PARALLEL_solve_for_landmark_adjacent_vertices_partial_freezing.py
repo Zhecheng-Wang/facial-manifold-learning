@@ -75,140 +75,6 @@ def solve_flame_params_direct(flame_model, V_target):
     
     return exp_params, jaw_params
 
-# def optimize_batched_flame_weights(flame_torch, V_sample_original, V_neutral, 
-#                                  feature_related_indices, feature_unrelated_vertices, 
-#                                  batch_size=8, lr=1.0, num_iterations=100):
-#     """
-#     Optimize FLAME weights for multiple frames in parallel batches using L-BFGS.
-    
-#     Parameters:
-#     -----------
-#     flame_torch : FLAME model
-#     V_sample_original : np.ndarray
-#         Original vertex samples [num_frames, num_vertices, 3]
-#     V_neutral : np.ndarray
-#         Neutral face vertices [num_vertices, 3]
-#     feature_related_indices : list
-#         Indices of vertices related to the current feature
-#     feature_unrelated_vertices : list
-#         Indices of vertices unrelated to the current feature
-#     batch_size : int
-#         Number of frames to process in parallel
-#     lr : float
-#         Learning rate (L-BFGS typically uses 1.0)
-#     num_iterations : int
-#         Number of optimization iterations
-        
-#     Returns:
-#     --------
-#     optimized_weights : np.ndarray
-#         Optimized weights [num_frames, 103]
-#     """
-#     num_frames = V_sample_original.shape[0]
-#     device = flame_torch.device
-    
-#     # Pre-convert targets to tensors and move to device
-#     local_goals = torch.from_numpy(V_sample_original[:, feature_related_indices, :]).to(device).float()
-#     non_local_goal = torch.from_numpy(V_neutral[feature_unrelated_vertices, :]).to(device).float()
-    
-#     # Initialize output array
-#     optimized_weights = np.zeros((num_frames, 103), dtype=np.float32)
-    
-#     # Process in batches
-#     for batch_start in range(0, num_frames, batch_size):
-#         batch_end = min(batch_start + batch_size, num_frames)
-#         current_batch_size = batch_end - batch_start
-        
-#         print(f"Processing batch {batch_start//batch_size + 1}/{(num_frames + batch_size - 1)//batch_size}")
-        
-#         # Initialize parameters for the batch
-#         shape_params = torch.zeros([current_batch_size, 100]).to(device)
-#         exp_params = torch.zeros([current_batch_size, 100]).to(device)
-#         tex_params = torch.zeros([current_batch_size, 50]).to(device)
-#         pose_params = torch.zeros([current_batch_size, 3]).to(device)
-#         jaw_params = torch.zeros([current_batch_size, 3]).to(device)
-#         eye_pose_params = torch.zeros([current_batch_size, 6]).to(device)
-        
-#         exp_params.requires_grad = True
-#         jaw_params.requires_grad = True
-        
-#         # Get targets for current batch
-#         batch_local_goals = local_goals[batch_start:batch_end]  # [batch_size, num_local_vertices, 3]
-#         batch_non_local_goal = non_local_goal.unsqueeze(0).expand(current_batch_size, -1, -1)  # [batch_size, num_non_local_vertices, 3]
-        
-#         # L-BFGS optimizer with appropriate settings for parameter fitting
-#         # optimizer = torch.optim.LBFGS(
-#         #     [exp_params, jaw_params], 
-#         #     lr=lr,
-#         #     max_iter=20,           # Max iterations per L-BFGS step
-#         #     max_eval=None,         # Max function evaluations per step
-#         #     tolerance_grad=1e-7,   # Gradient tolerance
-#         #     tolerance_change=1e-9, # Parameter change tolerance
-#         #     history_size=100,      # Number of past gradients to store
-#         #     line_search_fn="strong_wolfe"  # Use strong Wolfe line search
-#         # )
-
-#         optimizer = torch.optim.Adam(
-#             [exp_params, jaw_params],
-#             lr=lr)
-        
-#         start_time = time.time()
-        
-#         # L-BFGS requires a closure function that computes loss and gradients
-#         def closure():
-#             optimizer.zero_grad()
-            
-#             # Forward pass for entire batch
-#             pose_combined = torch.cat([pose_params, jaw_params], dim=1)  # [batch_size, 6]
-#             vertices_batch, _, _ = flame_torch(shape_params, exp_params, pose_params=pose_combined)
-#             # vertices_batch shape: [batch_size, num_vertices, 3]
-            
-#             # Compute losses for the batch
-#             vertices_local = vertices_batch[:, feature_related_indices]  # [batch_size, num_local_vertices, 3]
-#             vertices_non_local = vertices_batch[:, feature_unrelated_vertices]  # [batch_size, num_non_local_vertices, 3]
-            
-#             loss_local = torch.mean((vertices_local - batch_local_goals)**2)
-#             loss_non_local = torch.mean((vertices_non_local - batch_non_local_goal)**2) * 10
-#             loss = loss_local + loss_non_local
-            
-#             loss.backward()
-#             return loss
-        
-#         # L-BFGS optimization loop
-#         for iteration in range(num_iterations):
-#             loss = closure()
-#             # Optional: print progress for first batch or every few iterations
-#             if batch_start == 0 and (iteration % 10 == 0 or iteration == num_iterations - 1):
-#                 try:
-#                     current_loss = closure()
-#                     print(f"  Iteration {iteration}, Loss: {current_loss.item():.6f}")
-#                 except:
-#                     print(f"  Iteration {iteration}, Loss evaluation failed (likely converged)")
-                            
-        
-#         # Store optimized weights
-#         optimized_weights[batch_start:batch_end, :100] = exp_params.detach().cpu().numpy()
-#         optimized_weights[batch_start:batch_end, 100:103] = jaw_params.detach().cpu().numpy()
-        
-#         end_time = time.time()
-        
-#         # Final loss evaluation
-#         with torch.no_grad():
-#             try:
-#                 # Recompute final loss without gradients
-#                 pose_combined = torch.cat([pose_params, jaw_params], dim=1)
-#                 vertices_batch, _, _ = flame_torch(shape_params, exp_params, pose_params=pose_combined)
-#                 vertices_local = vertices_batch[:, feature_related_indices]
-#                 vertices_non_local = vertices_batch[:, feature_unrelated_vertices]
-#                 loss_local = torch.mean((vertices_local - batch_local_goals)**2)
-#                 loss_non_local = torch.mean((vertices_non_local - batch_non_local_goal)**2) * 10
-#                 final_loss = loss_local + loss_non_local
-#                 print(f"  Batch completed in {end_time - start_time:.2f} seconds, Final loss: {final_loss.item():.6f}")
-#             except:
-#                 print(f"  Batch completed in {end_time - start_time:.2f} seconds")
-    
-#     return optimized_weights
-
 def optimize_batched_flame_weights(flame_torch, V_sample_original, V_neutral, 
                                  feature_related_indices, feature_unrelated_vertices, 
                                  batch_size=8, lr=0.1, num_iterations=100):
@@ -270,7 +136,10 @@ def optimize_batched_flame_weights(flame_torch, V_sample_original, V_neutral,
         batch_local_goals = local_goals[batch_start:batch_end]  # [batch_size, num_local_vertices, 3]
         batch_non_local_goal = non_local_goal.unsqueeze(0).expand(current_batch_size, -1, -1)  # [batch_size, num_non_local_vertices, 3]
         
-        optimizer = torch.optim.Adam(
+        # optimizer = torch.optim.Adam(
+        #     [exp_params, jaw_params],
+        #     lr=lr)
+        optimizer = torch.optim.SGD(
             [exp_params, jaw_params],
             lr=lr)
         
@@ -283,13 +152,12 @@ def optimize_batched_flame_weights(flame_torch, V_sample_original, V_neutral,
             # vertices_batch shape: [batch_size, num_vertices, 3]
             
             # Compute losses for the batch
-            vertices_local = vertices_batch[:, feature_related_indices]  # [batch_size, num_local_vertices, 3]
-            vertices_non_local = vertices_batch[:, feature_unrelated_vertices]  # [batch_size, num_non_local_vertices, 3]
-            
-            # loss_local = torch.mean((vertices_local - batch_local_goals)**2)
-            loss_local = torch.mean((vertices_local - batch_local_goals)**2, dim=[1,2]).mean()
-            # loss_non_local = torch.mean((vertices_non_local - batch_non_local_goal)**2) * 10
-            loss_non_local = torch.mean((vertices_non_local - batch_non_local_goal)**2, dim=[1,2]).mean() * 10
+            vertices_local = vertices_batch[:, feature_related_indices]
+            vertices_non_local = vertices_batch[:, feature_unrelated_vertices]
+
+            # Option 3 (recommended): Keep per-sample gradient consistent
+            loss_local = torch.mean((vertices_local - batch_local_goals)**2, dim=[1,2]).sum()
+            loss_non_local = torch.mean((vertices_non_local - batch_non_local_goal)**2, dim=[1,2]).sum() * 10
             loss = loss_local + loss_non_local
             
             optimizer.zero_grad()
@@ -308,28 +176,11 @@ def optimize_batched_flame_weights(flame_torch, V_sample_original, V_neutral,
     
     return optimized_weights
 
-
-
-def display_a_single_mesh(V, F):
-    ps.remove_all_structures()
-    ps.set_verbosity(0)
-    ps.init()
-    ps.set_ground_plane_mode("none")
-    ps.set_view_projection_mode("orthographic")
-    ps.set_front_dir("z_front")
-    ps.set_background_color([0, 0, 0])
-    ps.register_surface_mesh(
-        "mesh", V, F,
-        color=[0.9, 0.9, 0.9],
-        edge_width=0.25, material="normal"
-        )
-    ps.show()
-
 # Configuration parameters
-BATCH_SIZE = 1  # Adjust based on your GPU memory
-LEARNING_RATE = 0.5
+BATCH_SIZE = 128  # Adjust based on your GPU memory
+LEARNING_RATE = 0.1
 NUM_ITERATIONS = 100
-NUM_FRAMES = 200 # -1 means all frames
+NUM_FRAMES = 1 # -1 means all frames
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")        
 print(f"Using device: {device}")
@@ -338,6 +189,7 @@ flame = FLAMEBlendshapes()
 lmk_indices = flame.F.shape
 flame.flame.to(device)
 ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning"
+ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
 K = 10
 facial_landmark_groups = {
     "jaw": list(range(0, 17)),  # 0-16: jawline points
@@ -431,7 +283,7 @@ for feature in facial_landmark_groups_keys:
     # optimize the flame weight to fit the frozen sample using batched optimization
     flame_torch = flame.flame
     
-    print(f"Optimizing {weight.shape[0]} frames with batch size {BATCH_SIZE}")
+    print(f"Optimizing {weight.shape[0]} frames with batch size {BATCH_SIZE}")    
     optimized_weight = optimize_batched_flame_weights(
         flame_torch, V_sample_i_original, V_neutral,
         feature_related_indices, feature_unrelated_vertices,

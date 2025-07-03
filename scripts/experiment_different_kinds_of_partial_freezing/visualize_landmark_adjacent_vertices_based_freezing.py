@@ -33,8 +33,8 @@ masks_we_care_about = list(facial_landmark_groups.keys())
 Vs = []
 directory_list = [
     "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test_freeze_landmarks_and_5_ajacent",
-    "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test_freeze_landmarks_and_3_ajacent",
-    "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test_freeze_landmarks",
+    "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test_freeze_landmarks_and_5_ajacent_test",
+    # "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test_freeze_landmarks",
 ]
 for directory_i in range(len(directory_list)):
     for feature_i in range(len(masks_we_care_about)):

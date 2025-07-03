@@ -94,6 +94,7 @@ flame = FLAMEBlendshapes()
 lmk_indices = flame.F.shape
 flame.flame.to(device)
 ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning"
+ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
 K = 5
 facial_landmark_groups = {
     "jaw": list(range(0, 17)),  # 0-16: jawline points
