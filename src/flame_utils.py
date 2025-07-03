@@ -546,14 +546,14 @@ class FLAME(nn.Module):
     which outputs the a mesh and 2D/3D facial landmarks
     """
 
-    def __init__(self, config, device=None):
+    def __init__(self, config, device=None, dtype=torch.float32):
         super(FLAME, self).__init__()
         # print('creating the FLAME Decoder')
         with open(config.flame_model_path, 'rb') as f:
             ss = pickle.load(f, encoding='latin1')
             flame_model = Struct(**ss)
         self.config = config    
-        self.dtype = torch.float32
+        self.dtype = dtype
         self.device = device if device is not None else torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.to(self.device)
         

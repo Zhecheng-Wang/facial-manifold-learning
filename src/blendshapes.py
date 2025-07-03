@@ -174,7 +174,17 @@ class BasicBlendshapes:
         return self.blendshapes[idx]
 
 class FLAMEBlendshapes:
-    def __init__(self):
+    def __init__(self, dtype=torch.float32):
+        """
+        Initialize FLAMEBlendshapes with configurable precision.
+        
+        Args:
+            dtype: torch.dtype, either torch.float32 or torch.float64 (double)
+        """
+        self.dtype = dtype
+        # Set numpy dtype based on torch dtype
+        self.np_dtype = np.float32 if dtype == torch.float32 else np.float64
+        
         FLAMEConfig = SimpleNamespace(
                 # flame_model_path=str(__dir__ / 'data/FLAME2020/generic_model.pkl'),
                 flame_model_path=os.path.join(PROJ_ROOT, "data/flame_model/FLAME2020/generic_model.pkl"),
@@ -188,17 +198,17 @@ class FLAMEBlendshapes:
         self.n_exp = 100
         self.n_shape = 100
         self.FLAMEConfig = FLAMEConfig
-        self.flame = FLAME(FLAMEConfig)
+        self.flame = FLAME(FLAMEConfig, dtype=dtype)
         F_flame_path = os.path.join(PROJ_ROOT, "data/flame_model/faces_flame.pickle")
         with open(F_flame_path, "rb") as f:
             F_flame = pickle.load(f)["faces"]
         
-        self.shape_params = torch.zeros([1, 100]).to(self.flame.device)
-        self.exp_params = torch.zeros([1, FLAMEConfig.n_exp]).to(self.flame.device)
-        self.tex_params = torch.zeros([1, 50]).to(self.flame.device)
-        self.pose_params = torch.zeros([1, 3]).to(self.flame.device)
-        self.jaw_params = torch.zeros([1, 3]).to(self.flame.device)
-        self.eye_pose_params = torch.zeros([1, 6]).to(self.flame.device)
+        self.shape_params = torch.zeros([1, 100], dtype=self.dtype).to(self.flame.device)
+        self.exp_params = torch.zeros([1, FLAMEConfig.n_exp], dtype=self.dtype).to(self.flame.device)
+        self.tex_params = torch.zeros([1, 50], dtype=self.dtype).to(self.flame.device)
+        self.pose_params = torch.zeros([1, 3], dtype=self.dtype).to(self.flame.device)
+        self.jaw_params = torch.zeros([1, 3], dtype=self.dtype).to(self.flame.device)
+        self.eye_pose_params = torch.zeros([1, 6], dtype=self.dtype).to(self.flame.device)
         
         vertices, landmarks2d, landmarks3d = self.flame(self.shape_params, self.exp_params, pose_params=torch.concat([self.pose_params, self.jaw_params], dim=1))
 
@@ -210,9 +220,9 @@ class FLAMEBlendshapes:
         self.names += [f"jaw_{i}" for i in range(3)]
 
         blendshape_exp, blendshapes_jaw, blendshape_mean = get_flame_blendshapes(self.flame)
-        self.blendshape_exp = blendshape_exp.float().cpu().numpy().transpose(2, 0, 1)
-        self.blendshapes_jaw = blendshapes_jaw.float().cpu().numpy().transpose(2, 0, 1)
-        self.blendshape_mean = blendshape_mean.float().cpu().numpy()
+        self.blendshape_exp = blendshape_exp.to(self.dtype).cpu().numpy().transpose(2, 0, 1).astype(self.np_dtype)
+        self.blendshapes_jaw = blendshapes_jaw.to(self.dtype).cpu().numpy().transpose(2, 0, 1).astype(self.np_dtype)
+        self.blendshape_mean = blendshape_mean.to(self.dtype).cpu().numpy().astype(self.np_dtype)
 
         self.V = self.blendshape_mean
         self.V = self.V - np.mean(self.V, axis=0)
@@ -220,12 +230,12 @@ class FLAMEBlendshapes:
         # get all the blendshapes    
         self.blendshapes = np.concatenate([self.blendshape_exp + self.blendshape_mean, self.blendshapes_jaw + self.blendshape_mean], axis=0)
 
-        self.delta = np.zeros((self.blendshapes.shape[0], self.V.shape[0]))
+        self.delta = np.zeros((self.blendshapes.shape[0], self.V.shape[0]), dtype=self.np_dtype)
         for i in range(self.blendshapes.shape[0]):
             self.delta[i] = np.linalg.norm(self.blendshapes[i], axis=1)
-        self.weights = np.zeros(self.blendshapes.shape[0])
-        self.translation = np.array([0, 0, 0], dtype=np.float32)
-        self.scale_factor = 1
+        self.weights = np.zeros(self.blendshapes.shape[0], dtype=self.np_dtype)
+        self.translation = np.array([0, 0, 0], dtype=self.np_dtype)
+        self.scale_factor = 1.0
         N = igl.per_vertex_normals(self.V, self.F)
         self.facing_dir = np.mean(N, axis=0)
         self.facing_dir /= np.linalg.norm(self.facing_dir)
@@ -233,7 +243,7 @@ class FLAMEBlendshapes:
     def get_landmark_indices(self):
         return self.flame.full_lmk_faces_idx
     def translate(self, delta_pos):
-        self.translation += np.array(delta_pos)
+        self.translation += np.array(delta_pos, dtype=self.np_dtype)
 
     def scale(self, scaling=1):
         self.scale_factor = scaling
@@ -242,20 +252,20 @@ class FLAMEBlendshapes:
         if weights is None:
             weights = self.weights
         
-        self.exp_params = torch.from_numpy(weights[:self.FLAMEConfig.n_exp]).float().unsqueeze(0).to(self.flame.device)
-        self.jaw_params = torch.from_numpy(weights[self.FLAMEConfig.n_exp:]).float().unsqueeze(0).to(self.flame.device)
+        self.exp_params = torch.from_numpy(weights[:self.FLAMEConfig.n_exp]).to(self.dtype).unsqueeze(0).to(self.flame.device)
+        self.jaw_params = torch.from_numpy(weights[self.FLAMEConfig.n_exp:]).to(self.dtype).unsqueeze(0).to(self.flame.device)
         return
     
     def eval(self, weights=None, return_landmarks=False):
         self.displacement(weights) # update the parameter if it changes        
         vertices, landmarks2d, landmarks3d = self.flame(self.shape_params, self.exp_params, pose_params=torch.concat([self.pose_params, self.jaw_params], dim=1))
-        V = vertices[0].cpu().numpy()
+        V = vertices[0].cpu().numpy().astype(self.np_dtype)
         V = V - np.mean(self.V, axis=0)
         V *= self.scale_factor
         V += self.translation
         self.V_cache = V.copy()  # Cache the current vertices after evaluation
         if return_landmarks:
-            landmarks3d = landmarks3d[0].cpu().numpy()
+            landmarks3d = landmarks3d[0].cpu().numpy().astype(self.np_dtype)
             landmarks3d = landmarks3d - np.mean(self.V, axis=0)
             landmarks3d *= self.scale_factor
             landmarks3d += self.translation
@@ -269,7 +279,7 @@ class FLAMEBlendshapes:
         return self.blendshapes.shape[0]
     def __getitem__(self, idx):
         return self.blendshapes[idx]
-    
+
 if __name__ == "__main__":
     flameBS = FLAMEBlendshapes()
     V = flameBS.eval()   
