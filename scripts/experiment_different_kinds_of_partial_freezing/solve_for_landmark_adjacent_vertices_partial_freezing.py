@@ -212,7 +212,7 @@ for feature in facial_landmark_groups_keys:
         for i in range(100):
             vertices, landmarks2d, landmarks3d = flame_torch(shape_params, exp_params, pose_params=torch.concat([pose_params, jaw_params], dim=1))
             loss_local = torch.mean((vertices[0, feature_related_indices] - local_goal)**2)
-            loss_non_local = torch.mean((vertices[0, feature_unrelated_vertices] - non_local_goal)**2) * 10
+            loss_non_local = torch.mean((vertices[0, feature_unrelated_vertices] - non_local_goal)**2)
             loss = loss_local + loss_non_local
             optimizer.zero_grad()
             loss.backward()
@@ -234,7 +234,7 @@ for feature in facial_landmark_groups_keys:
     v_sample_i_optimized = np.concatenate(v_sample_i_optimized, axis=0)
 
     # save the optimized weight
-    save_dir = os.path.join(ROOT, f"/experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_200_videos/")
+    save_dir = os.path.join(ROOT, f"/experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_test2/")
     os.makedirs(save_dir, exist_ok=True)
     partially_frozened_model_weights = os.path.join(save_dir, "bs_for_{}".format(feature + ".npy"))
     np.save(partially_frozened_model_weights, optimized_weight)
