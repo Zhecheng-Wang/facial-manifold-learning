@@ -174,7 +174,7 @@ class BasicBlendshapes:
         return self.blendshapes[idx]
 
 class FLAMEBlendshapes:
-    def __init__(self, dtype=torch.float32):
+    def __init__(self, dtype=torch.float32, device=None):
         """
         Initialize FLAMEBlendshapes with configurable precision.
         
@@ -198,7 +198,7 @@ class FLAMEBlendshapes:
         self.n_exp = 100
         self.n_shape = 100
         self.FLAMEConfig = FLAMEConfig
-        self.flame = FLAME(FLAMEConfig, dtype=dtype)
+        self.flame = FLAME(FLAMEConfig, dtype=dtype, device=device)
         F_flame_path = os.path.join(PROJ_ROOT, "data/flame_model/faces_flame.pickle")
         with open(F_flame_path, "rb") as f:
             F_flame = pickle.load(f)["faces"]
