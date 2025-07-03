@@ -139,7 +139,7 @@ def optimize_batched_flame_weights(flame_torch, V_sample_original, V_neutral,
         # optimizer = torch.optim.Adam(
         #     [exp_params, jaw_params],
         #     lr=lr)
-        optimizer = torch.optim.SGD(
+        optimizer = torch.optim.Adam(
             [exp_params, jaw_params],
             lr=lr)
         
@@ -177,8 +177,8 @@ def optimize_batched_flame_weights(flame_torch, V_sample_original, V_neutral,
     return optimized_weights
 
 # Configuration parameters
-BATCH_SIZE = 128  # Adjust based on your GPU memory
-LEARNING_RATE = 0.1
+BATCH_SIZE = 1  # Adjust based on your GPU memory
+LEARNING_RATE = 1
 NUM_ITERATIONS = 100
 NUM_FRAMES = 1 # -1 means all frames
 
@@ -189,8 +189,8 @@ flame = FLAMEBlendshapes()
 lmk_indices = flame.F.shape
 flame.flame.to(device)
 ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning"
-ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
-K = 10
+# ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
+K = 5
 facial_landmark_groups = {
     "jaw": list(range(0, 17)),  # 0-16: jawline points
     
@@ -300,7 +300,7 @@ for feature in facial_landmark_groups_keys:
     v_sample_i_optimized = np.concatenate(v_sample_i_optimized, axis=0)
 
     # save the optimized weight
-    save_dir = os.path.join(ROOT, f"experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_200_videos/")
+    save_dir = os.path.join(ROOT, f"experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_test_individual/")
     os.makedirs(save_dir, exist_ok=True)
     partially_frozened_model_weights = os.path.join(save_dir, "bs_for_{}".format(feature + ".npy"))
     np.save(partially_frozened_model_weights, optimized_weight)
