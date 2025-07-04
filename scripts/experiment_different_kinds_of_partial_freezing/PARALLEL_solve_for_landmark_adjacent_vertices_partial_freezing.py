@@ -160,7 +160,7 @@ def optimize_batched_flame_weights_manual_adam(flame_torch, V_sample_original, V
 BATCH_SIZE = 512  # Adjust based on your GPU memory
 LEARNING_RATE = 0.5
 NUM_ITERATIONS = 150
-NUM_FRAMES = 200 # -1 means all frames
+NUM_FRAMES = -1 # -1 means all frames
 K = 10
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")        
@@ -288,7 +288,7 @@ for feature in facial_landmark_groups_keys:
     v_sample_i_optimized = np.concatenate(v_sample_i_optimized, axis=0)
 
     # save the optimized weight
-    save_dir = os.path.join(ROOT, f"experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_200_video/")
+    save_dir = os.path.join(ROOT, f"experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_all_video/")
     os.makedirs(save_dir, exist_ok=True)
     partially_frozened_model_weights = os.path.join(save_dir, "bs_for_{}".format(feature + ".npy"))
     np.save(partially_frozened_model_weights, optimized_weight)
