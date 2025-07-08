@@ -47,7 +47,7 @@ for directory_i in range(len(directory_list)):
         try:
             optimized_weight_for_feature_i = np.load(partially_frozened_model_weights)[:1000]
         except:
-            print(f"Could not load weights for {feature}. Skipping...")
+            print(f"Could not load weights for {feature}, directory {directory}. Skipping...")
             break
         flame = FLAMEBlendshapes()
         

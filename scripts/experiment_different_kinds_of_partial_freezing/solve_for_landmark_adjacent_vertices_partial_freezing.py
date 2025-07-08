@@ -194,7 +194,6 @@ for feature in facial_landmark_groups_keys:
 
     # optimize the flame weight to fit the frozen sample
     flame_torch = flame.flame
-
     optimized_weight = torch.zeros(weight.shape).to(flame_torch.device)
     for frame_i in range(weight.shape[0]):
         shape_params = torch.zeros([1, 100]).to(flame_torch.device)
