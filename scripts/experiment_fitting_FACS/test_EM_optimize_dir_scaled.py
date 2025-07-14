@@ -226,6 +226,12 @@ EM_ITERATIONS = 10
 EM_FACS_WEIGHT_ITERATIONS = 1000
 EM_FACS_DIRE_ITERATIONS = 100
 W_REG = 1000
+
+# NEW: Batch parameters
+TRAINING_BATCH_SIZE = 64
+VALIDATION_BATCH_SIZE = 8
+PATIENCE = 3  # Stop if validation doesn't improve for 3 iterations
+
 seed = 42
 np.random.seed(seed)
 torch.manual_seed(seed)
@@ -327,19 +333,25 @@ weight = torch.from_numpy(weight).to(device) # (Frames, 103)
 
 
 ################ EM optimization ##################
-weight = weight[0:10]
-current_batch_size = weight.shape[0]
+# NEW: Use all frames instead of just 10
+total_frames = weight.shape[0]
+print(f"Total frames available: {total_frames}")
+
+# Split into train and validation sets
+n_val = min(VALIDATION_BATCH_SIZE * 5, int(0.2 * total_frames))  # Use 20% for validation or 5x validation batch size
+train_indices = np.arange(total_frames - n_val)
+val_indices = np.arange(total_frames - n_val, total_frames)
+
+train_weight = weight[train_indices]
+val_weight = weight[val_indices]
+
+print(f"Training frames: {len(train_indices)}, Validation frames: {len(val_indices)}")
 
 shape_params_FACS = torch.zeros([51, 100]).to(device).double()
 tex_params_FACS = torch.zeros([51, 50]).to(device).double()
 pose_params_FACS = torch.zeros([51, 3]).to(device).double()
 flame_full_bary_weights = flame_full_bary_weights.double().to(device)  # (Landmarks, Vertices)
 ARkit_full_bary_weights = ARkit_full_bary_weights.double().to(device)
-
-shape_params_frames = torch.zeros((weight.shape[0], 100), device=device, dtype=torch.double)  # (Frames, 100)
-tex_params_frames = torch.zeros((weight.shape[0], 50), device=device, dtype=torch.double)  # (Frames, 50)
-pose_params_frames = torch.zeros((weight.shape[0], 3), device=device, dtype=torch.double)  # (Frames, 3)
-# losses are weighted differently
 
 flame_model = FLAMEBlendshapes(device=device, dtype=torch.double)
 flame_module = flame_model.flame
@@ -348,91 +360,167 @@ flame_neutral = torch.unsqueeze(flame_neutral, dim=0)  # (1, Vertices, 3)
 
 losses_weights_recon = []
 losses_directions_recond = []
-for i in range(0, EM_ITERATIONS):
-# for i in range(0, 1):
-    # initialize ADAM optimizers since we don't want interference between EM iterations
-    direction_optimizer =  BatchedManualAdam(51, [(103,) ,], lr=EM_LEARNING_RATE, device=device, dtype=torch.double)
-    weight_optimizer = BatchedManualAdam(current_batch_size, [(51, )], lr=EM_WEIGHT_LEARN_RATE, device=device, dtype=torch.double)
-    # optimize for facs_weights
-    FACS_weights = torch.abs(torch.randn((weight.shape[0], FACS_directions.shape[0]), device=device, dtype=torch.double)*0.01)  # initialize with small random values
-    # fix the FACS directions
-    FACS_directions.requires_grad = False  # we will optimize this
-    FACS_weights.requires_grad = True  # we will optimize this
-    # update the shape and pose parameters iteratively
+validation_losses = []
+best_val_loss = float('inf')
+patience_counter = 0
+
+def compute_reconstruction_loss(weights_batch, FACS_weights_batch, FACS_directions):
+    """Compute reconstruction loss for a batch of frames"""
+    FACS_based_weights = (FACS_weights_batch ** 2) @ FACS_directions  # (Batch, 103)
+    
+    # Create shape and pose params for this batch
+    shape_params_batch = torch.zeros((weights_batch.shape[0], 100), device=device, dtype=torch.double)
+    pose_params_batch = torch.zeros((weights_batch.shape[0], 3), device=device, dtype=torch.double)
+    
+    V_bs, _, _ = flame_module(shape_params_batch, FACS_based_weights[:, :100], 
+                             pose_params=torch.concat([pose_params_batch, FACS_based_weights[:, 100:103]], dim=1))
+    V_gt, _, _ = flame_module(shape_params_batch, weights_batch[:, :100], 
+                             pose_params=torch.concat([pose_params_batch, weights_batch[:, 100:]], dim=1))
+    
+    recon_loss = torch.norm(V_bs - V_gt, p=2, dim=-1).mean()
+    return recon_loss
+
+for em_iter in range(0, EM_ITERATIONS):
+    print(f"\n--- EM Iteration {em_iter} ---")
+    
+    # Sample training batch
+    train_batch_indices = np.random.choice(len(train_indices), TRAINING_BATCH_SIZE, replace=True)
+    train_batch = train_weight[train_batch_indices]
+    current_batch_size = train_batch.shape[0]
+    
+    # Initialize ADAM optimizers for this batch
+    direction_optimizer = BatchedManualAdam(51, [(103,)], lr=EM_LEARNING_RATE, device=device, dtype=torch.double)
+    weight_optimizer = BatchedManualAdam(current_batch_size, [(51,)], lr=EM_WEIGHT_LEARN_RATE, device=device, dtype=torch.double)
+    
+    # Initialize FACS weights for this batch
+    FACS_weights = torch.abs(torch.randn((current_batch_size, FACS_directions.shape[0]), device=device, dtype=torch.double) * 0.01)
+    
+    # Shape and pose params for this batch
+    shape_params_frames = torch.zeros((current_batch_size, 100), device=device, dtype=torch.double)
+    pose_params_frames = torch.zeros((current_batch_size, 3), device=device, dtype=torch.double)
+    
+    # Optimize FACS weights
+    FACS_directions.requires_grad = False
+    FACS_weights.requires_grad = True
+    
     for fitting_iter in range(0, EM_FACS_WEIGHT_ITERATIONS):
-        FACS_based_weights = (FACS_weights ** 2) @ FACS_directions  # (Frames, 103)
-        # latent based reconstruction loss (we ignore these for now)        
-        V_bs, _, _ = flame_module(shape_params_frames, FACS_based_weights[:, :100], pose_params=torch.concat([pose_params_frames, FACS_based_weights[:, 100:103]], dim=1))
-        V_gt, _, _ = flame_module(shape_params_frames, weight[:, :100], pose_params=torch.concat([pose_params_frames, weight[:, 100:]], dim=1))
-        recon_loss_geometry = torch.norm(V_bs - V_gt, p=2, dim=-1).mean()  # (Frames, Vertices)
-        l1_loss = torch.norm(FACS_weights, p=1, dim=-1).mean() # L1 regularization
-        loss = recon_loss_geometry + 0.000001 * l1_loss  # add the L1 regularization term
+        FACS_based_weights = (FACS_weights ** 2) @ FACS_directions
+        
+        V_bs, _, _ = flame_module(shape_params_frames, FACS_based_weights[:, :100], 
+                                 pose_params=torch.concat([pose_params_frames, FACS_based_weights[:, 100:103]], dim=1))
+        V_gt, _, _ = flame_module(shape_params_frames, train_batch[:, :100], 
+                                 pose_params=torch.concat([pose_params_frames, train_batch[:, 100:]], dim=1))
+        
+        recon_loss_geometry = torch.norm(V_bs - V_gt, p=2, dim=-1).mean()
+        l1_loss = torch.norm(FACS_weights, p=1, dim=-1).mean()
+        loss = recon_loss_geometry + 0.000001 * l1_loss
+        
         loss.backward()
         weight_optimizer.step([FACS_weights], [FACS_weights.grad])
-        FACS_weights.grad.zero_() # reset grad
-        # if fitting_iter % 10 == 0:
-        #     print(f"EM iteration {i}, fitting iteration {fitting_iter}: recon loss geometry: {recon_loss_geometry.item()}, l1 loss: {l1_loss.item()}")
-    losses_weights_recon.append(recon_loss_geometry.item())        
-    print(f"weights -> EM iter: {i}, recon loss: {recon_loss_geometry.item()}, l1 loss: {l1_loss.item()}")
-
-    # optimize for FACS_directions
-    FACS_weights.requires_grad = False  # we will optimize this
-    FACS_directions.requires_grad = True  # we will optimize this
-    FACS_weights_sq = FACS_weights ** 2  # (Frames, 51)
+        FACS_weights.grad.zero_()
+        
+    losses_weights_recon.append(recon_loss_geometry.item())
+    print(f"Weights optimization - recon loss: {recon_loss_geometry.item():.6f}, l1 loss: {l1_loss.item():.6f}")
+    
+    # Optimize FACS directions
+    FACS_weights.requires_grad = False
+    FACS_directions.requires_grad = True
+    FACS_weights_sq = FACS_weights ** 2
+    
     for fitting_iter in range(0, EM_FACS_DIRE_ITERATIONS):
-        FACS_based_weights = FACS_weights_sq @ FACS_directions  # (Frames, 103)
-        # compute geometry loss on each frame
-        V_bs, _, _ = flame_module(shape_params_frames, FACS_based_weights[:, :100], pose_params=torch.concat([pose_params_frames, FACS_based_weights[:, 100:103]], dim=1))
-        V_gt, _, _ = flame_module(shape_params_frames, weight[:, :100], pose_params=torch.concat([pose_params_frames, weight[:, 100:]], dim=1))
-        recon_loss_geometry = torch.norm(V_bs - V_gt, p=2, dim=-1).mean()  # (Frames, Vertices)
-        # compute the frozen loss
+        FACS_based_weights = FACS_weights_sq @ FACS_directions
+        
+        # Compute geometry loss
+        V_bs, _, _ = flame_module(shape_params_frames, FACS_based_weights[:, :100], 
+                                 pose_params=torch.concat([pose_params_frames, FACS_based_weights[:, 100:103]], dim=1))
+        V_gt, _, _ = flame_module(shape_params_frames, train_batch[:, :100], 
+                                 pose_params=torch.concat([pose_params_frames, train_batch[:, 100:]], dim=1))
+        recon_loss_geometry = torch.norm(V_bs - V_gt, p=2, dim=-1).mean()
+        
+        # Compute frozen loss
         exp_params = FACS_directions[:, :100]
         jaw_params = FACS_directions[:, 100:103]
-        # compute frozen loss
-        V_bs, _, _ = flame_module(shape_params_FACS, exp_params, pose_params=torch.concat([pose_params_FACS, jaw_params], dim=1))
-        frozen_loss = torch.norm(V_bs - flame_neutral, p=2, dim=-1) * torch.unsqueeze(frozen_LM_mask, dim=0)  # (Frames, Vertices)
+        V_bs_facs, _, _ = flame_module(shape_params_FACS, exp_params, 
+                                       pose_params=torch.concat([pose_params_FACS, jaw_params], dim=1))
+        frozen_loss = torch.norm(V_bs_facs - flame_neutral, p=2, dim=-1) * torch.unsqueeze(frozen_LM_mask, dim=0)
         frozen_loss = frozen_loss.mean()
-        # compute LM loss
-        flame_LM = flame_full_bary_weights @ V_bs  # (Frames, Vert
-        AR_kit_LM = ARkit_full_bary_weights @ ARkitBS.V  # (Frames, Vertices, 3)
+        
+        # Compute LM loss
+        flame_LM = flame_full_bary_weights @ V_bs_facs
+        AR_kit_LM = ARkit_full_bary_weights @ ARkitBS.V
         lm_loss = torch.norm(flame_LM - AR_kit_LM, p=2, dim=-1).mean()
-        loss = recon_loss_geometry + W_REG * (lm_loss + frozen_loss * W_FROZEN)  # add the frozen loss
+        
+        loss = recon_loss_geometry + W_REG * (lm_loss + frozen_loss * W_FROZEN)
         loss.backward()
         direction_optimizer.step([FACS_directions], [FACS_directions.grad])
-        FACS_directions.grad.zero_()  # reset grad
-        # if fitting_iter % 10 == 0:
-        #     print(f"dires -> fitting_iter: {fitting_iter}, reconstruction loss: {recon_loss_geometry.item()}, frozen loss: {frozen_loss.item()}, lm loss: {lm_loss.item()}")
-    losses_directions_recond.append(recon_loss_geometry.item())
-
-    print(f"dires -> EM iter: {i}, reconstruction loss: {recon_loss_geometry.item()}, frozen loss: {frozen_loss.item()}, lm loss: {lm_loss.item()}")
-    if i % 10 == 0:
-        # implement a stopping condition (stop if losses_directions_recond[-1] is greater than the average of last 5 losses)
-        if len(losses_directions_recond) > 5 and losses_directions_recond[-1] > np.mean(losses_directions_recond[-5:]):
-            print(f"Stopping early at iteration {i} due to increasing loss.")
-            break
-        # save the FACS_directions
-        save_folder = f"EM_refinement_{CLIPS_OF_DATA}_clips_data"
-        save_folder = os.path.join(surrogate_model_root_path, save_folder)
-        os.mkdir(save_folder) if not os.path.exists(save_folder) else None
-        np.save(os.path.join(save_folder, f"FACS_directions_{i}.npy"), FACS_directions.detach().cpu().numpy())  
-        
+        FACS_directions.grad.zero_()
     
-    # load the 
-save_root = os.path.join(surrogate_model_root_path, "EM_optimized_FACS_directions_geometry_based")
+    losses_directions_recond.append(recon_loss_geometry.item())
+    print(f"Directions optimization - recon loss: {recon_loss_geometry.item():.6f}, frozen loss: {frozen_loss.item():.6f}, lm loss: {lm_loss.item():.6f}")
+    
+    # Validation step
+    with torch.no_grad():
+        val_losses = []
+        for i in range(0, len(val_indices), VALIDATION_BATCH_SIZE):
+            val_batch_indices = val_indices[i:i+VALIDATION_BATCH_SIZE]
+            val_batch = val_weight[i:i+VALIDATION_BATCH_SIZE]
+            
+            # Initialize FACS weights for validation batch
+            val_FACS_weights = torch.abs(torch.randn((val_batch.shape[0], FACS_directions.shape[0]), 
+                                                    device=device, dtype=torch.double) * 0.01)
+            
+            # Quick optimization of weights for validation
+            for _ in range(50):  # Fewer iterations for validation
+                val_loss = compute_reconstruction_loss(val_batch, val_FACS_weights, FACS_directions)
+                val_loss.backward()
+                val_FACS_weights.data -= 0.01 * val_FACS_weights.grad
+                val_FACS_weights.grad.zero_()
+            
+            val_losses.append(val_loss.item())
+        
+        current_val_loss = np.mean(val_losses)
+        validation_losses.append(current_val_loss)
+        print(f"Validation loss: {current_val_loss:.6f}")
+        
+        # Early stopping check
+        if current_val_loss < best_val_loss:
+            best_val_loss = current_val_loss
+            patience_counter = 0
+            # Save best model
+            best_FACS_directions = FACS_directions.clone()
+        else:
+            patience_counter += 1
+            
+        if patience_counter >= PATIENCE:
+            print(f"Early stopping at iteration {em_iter} - validation loss hasn't improved for {PATIENCE} iterations")
+            FACS_directions = best_FACS_directions  # Restore best model
+            break
+    
+    # Save checkpoints
+    if em_iter % 10 == 0:
+        save_folder = f"EM_refinement_{CLIPS_OF_DATA}_clips_data_batched"
+        save_folder = os.path.join(surrogate_model_root_path, save_folder)
+        os.makedirs(save_folder, exist_ok=True)
+        np.save(os.path.join(save_folder, f"FACS_directions_{em_iter}.npy"), FACS_directions.detach().cpu().numpy())
+        np.save(os.path.join(save_folder, f"validation_losses.npy"), np.array(validation_losses))
 
+# Save final optimized FACS directions
+save_root = os.path.join(surrogate_model_root_path, "EM_optimized_FACS_directions_geometry_based_batched")
 if not os.path.exists(save_root):
     os.makedirs(save_root)
-save_root
-FACS_directions_np = FACS_directions.detach().cpu().numpy()
 
+FACS_directions_np = FACS_directions.detach().cpu().numpy()
 for i in range(FACS_directions_np.shape[0]):
     exp_params = FACS_directions_np[i][:100]
     jaw_params = FACS_directions_np[i][100:]
     np.save(os.path.join(save_root, f"exp_params_{i}.npy"), exp_params)
     np.save(os.path.join(save_root, f"jaw_params_{i}.npy"), jaw_params)
 
+# Save training history
+np.save(os.path.join(save_root, "training_losses_weights.npy"), np.array(losses_weights_recon))
+np.save(os.path.join(save_root, "training_losses_directions.npy"), np.array(losses_directions_recond))
+np.save(os.path.join(save_root, "validation_losses.npy"), np.array(validation_losses))
 
-
-    
-
-
+print(f"\nTraining completed. Final validation loss: {validation_losses[-1]:.6f}")
+print(f"Best validation loss: {best_val_loss:.6f}")
+print(f"Results saved to: {save_root}")
