@@ -316,7 +316,7 @@ def solve_flame_params_direct(flame_model, V_target):
 def load_flame_blendshape_model():
     controller_range = [0, 1]
     n_blendshapes = 51
-    surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM"
+    surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_W_frozen_0p002/EM_optimized_FACS_directions_higher_reg"
     # surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test/"
     flame = FLAMEBlendshapes()
 
@@ -326,6 +326,10 @@ def load_flame_blendshape_model():
         jaw_path = os.path.join(surrogate_model_root_path, f"jaw_params_{i}.npy")
         exp_params = np.load(exp_path)
         jaw_params = np.load(jaw_path)
+        if exp_params.ndim == 1:
+            exp_params = exp_params.reshape(1, -1)
+        if jaw_params.ndim == 1:
+            jaw_params = jaw_params.reshape(1, -1)
         weights.append(np.concatenate([exp_params, jaw_params], axis=1))
     
     flame_space_path_interp = []

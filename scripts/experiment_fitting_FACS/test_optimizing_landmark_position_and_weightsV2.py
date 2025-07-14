@@ -159,6 +159,10 @@ def compute_landmark_groups_of_blendshape(V_0, V_bs, landmark_groups):
  
 # compute_landmark_groups_of_blendshape(ARkitBS.V, ARkitBS.blendshapes[0], ARkit_lm_groups)
 
+LEARNING_RATE = 0.03
+ITERATIONS = 5000
+W_FROZEN = 0.0005
+K=5
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 flameBS = FLAMEBlendshapes(device=device)
@@ -198,7 +202,7 @@ for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
     non_frozen_set, frozen_set = compute_vertex_assignments(flameBS.V, flameBS.F,
         key_point_set_A=involved_lm_indices,
         key_point_set_B=non_involved_lm_indices,
-        K=2)
+        K=K)
     non_frozen_set = list(non_frozen_set)
     frozen_set = list(frozen_set)
     
@@ -221,9 +225,10 @@ for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
 
     exp_params.requires_grad = True
     jaw_params.requires_grad = True
-    optimizer = torch.optim.Adam([exp_params, jaw_params], lr=0.1)
+    optimizer = torch.optim.Adam([exp_params, jaw_params], lr=LEARNING_RATE)
     neutral_flame = torch.from_numpy(flameBS.V).to(device)
-    for i in range(0, 300):
+    loss_for_bs_i = []
+    for i in range(0, ITERATIONS):
         optimizer.zero_grad()
         
         # compute the FLAME mesh
@@ -235,19 +240,26 @@ for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
         flame_LM = flame_full_bary_weights @ V_optimized
     
         # compute the loss
-        loss = torch.mean((flame_LM - target_lm_i) ** 2) + frozen_loss * 0.002
+        loss = torch.mean((flame_LM - target_lm_i) ** 2) + frozen_loss * W_FROZEN
         
         # backpropagate
         loss.backward()
         optimizer.step()
-        
-        if i % 10 == 0:
+        if i % 50 == 0:
             print(f"Iteration {i}, Loss: {loss.item()}")
+            # add a stop condition
+            past_3_mean = np.mean(loss_for_bs_i[-3:]) if len(loss_for_bs_i) >= 3 else None
+            if past_3_mean is not None and  loss.item() - past_3_mean > 0:
+                print(f"Stopping early at iteration {i} with loss {loss.item()}")
+                break
+
+        loss_for_bs_i.append(loss.item())
+
     flame_param_dires.append([exp_params, jaw_params])
 
 flame_param_dires = [[x[0].detach().cpu().numpy(), x[1].detach().cpu().numpy()] for x in flame_param_dires]
 # save these
-save_root = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM"
+save_root = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002_K=5"
 if not os.path.exists(save_root):
     os.makedirs(save_root)
 for i in range(len(flame_param_dires)):
