@@ -213,7 +213,7 @@ class FLAMEBlendshapes:
         vertices, landmarks2d, landmarks3d = self.flame(self.shape_params, self.exp_params, pose_params=torch.concat([self.pose_params, self.jaw_params], dim=1))
 
         
-        self.F = F_flame
+        self.F = F_flame.to(self.flame.device)
 
         # names of the blendshapes + jaw
         self.names = [f"bs_{i}" for i in range(self.FLAMEConfig.n_exp)]
