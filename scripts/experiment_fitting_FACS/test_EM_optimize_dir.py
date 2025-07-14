@@ -216,7 +216,7 @@ class BatchedManualAdam:
 LEARNING_RATE = 0.03
 ITERATIONS = 5000
 K=5
-CLIPS_OF_DATA = 5
+CLIPS_OF_DATA = 1
 
 # em parameters
 EM_LEARNING_RATE = 0.0005
@@ -357,7 +357,7 @@ for i in range(0, EM_ITERATIONS):
 
     FACS_directions.requires_grad = False  # we will optimize this
     FACS_weights.requires_grad = True  # we will optimize this
-    for fitting_iter in range(0, 10000):
+    for fitting_iter in range(0, 100):
         FACS_based_weights = FACS_weights @ FACS_directions  # (Frames, 103)
         recon_loss_latent = torch.norm(FACS_based_weights - weight, p=2, dim=-1).mean()
         

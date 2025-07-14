@@ -160,10 +160,10 @@ def optimize_batched_flame_weights_manual_adam(flame_torch, V_sample_original, V
 BATCH_SIZE = 512  # Adjust based on your GPU memory
 LEARNING_RATE = 0.5
 NUM_ITERATIONS = 150
-NUM_FRAMES = -1 # -1 means all frames
-K = 10
+NUM_FRAMES = 200 # -1 means all frames
+K = 5
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")        
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")        
 print(f"Using device: {device}")
 
 flame = FLAMEBlendshapes(torch.double, device=device)
@@ -172,20 +172,34 @@ flame.flame.to(device)
 ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning"
 # ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
 
-facial_landmark_groups = {
-    "jaw": list(range(0, 17)),  # 0-16: jawline points
+# facial_landmark_groups = {
+#     "jaw": list(range(0, 17)),  # 0-16: jawline points
     
+#     "right_eyebrow": list(range(17, 22)),  # 17-21: right eyebrow
+#     "left_eyebrow": list(range(22, 27)),   # 22-26: left eyebrow
+    
+#     "nose_bridge": list(range(27, 31)),    # 27-30: nose bridge
+#     "nose_tip": list(range(31, 36)),       # 31-35: nose tip and nostrils
+    
+#     "right_eye": list(range(36, 42)),      # 36-41: right eye
+#     "left_eye": list(range(42, 48)),       # 42-47: left eye
+    
+#     "lip": list(range(48, 68)),      # 48-67: outer lip contour
+# }
+
+facial_landmark_groups = {    
     "right_eyebrow": list(range(17, 22)),  # 17-21: right eyebrow
     "left_eyebrow": list(range(22, 27)),   # 22-26: left eyebrow
     
-    "nose_bridge": list(range(27, 31)),    # 27-30: nose bridge
-    "nose_tip": list(range(31, 36)),       # 31-35: nose tip and nostrils
+    "nose": list(range(27, 36)),       # 31-35: nose tip and nostrils
     
     "right_eye": list(range(36, 42)),      # 36-41: right eye
     "left_eye": list(range(42, 48)),       # 42-47: left eye
     
-    "lip": list(range(48, 68)),      # 48-67: outer lip contour
+    "lip+jaw": list(range(48, 68)) + list(range(0, 17)),      # 48-67: outer lip contour
 }
+
+
 
 # load the pickle_dataset:
 dataset_path = os.path.join(ROOT, "data/MeadRavdess/val_mead_ravdess_0.1.pickle")
@@ -288,7 +302,7 @@ for feature in facial_landmark_groups_keys:
     v_sample_i_optimized = np.concatenate(v_sample_i_optimized, axis=0)
 
     # save the optimized weight
-    save_dir = os.path.join(ROOT, f"experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_all_video/")
+    save_dir = os.path.join(ROOT, f"experiments/full_face_bs_test_freeze_landmarks_and_{K}_ajacent_200_video_aggregated_LM/")
     os.makedirs(save_dir, exist_ok=True)
     partially_frozened_model_weights = os.path.join(save_dir, "bs_for_{}".format(feature + ".npy"))
     np.save(partially_frozened_model_weights, optimized_weight)
