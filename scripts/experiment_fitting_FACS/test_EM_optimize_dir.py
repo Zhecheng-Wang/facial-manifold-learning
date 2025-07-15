@@ -382,6 +382,24 @@ for i in range(0, EM_ITERATIONS):
     losses_weights_recon.append(recon_loss_geometry.item())        
     print(f"weights -> EM iter: {i}, recon loss: {recon_loss_geometry.item()}, l1 loss: {l1_loss.item()}")
 
+
+    # FACS_based_weights.shape
+    # from matplotlib import pyplot as plt
+    # plt.bar(np.arange(0, FACS_based_weights[0].shape[0]), FACS_based_weights[0].detach().cpu().numpy())
+    # plt.bar(np.arange(0, weight[0].shape[0]), weight[0].detach().cpu().numpy(), alpha=0.5)
+
+    # show the geometry
+    V_bs, _, _ = flame_module(shape_params_frames, FACS_based_weights[:, :100], pose_params=torch.concat([pose_params_frames, FACS_based_weights[:, 100:103]], dim=1))
+    V_gt, _, _ = flame_module(shape_params_frames, weight[:, :100], pose_params=torch.concat([pose_params_frames, weight[:, 100:]], dim=1))
+    display_pairs_of_meshes(
+        [V_bs[0].detach().cpu().numpy()],
+        [flame_model.F],
+        [V_gt[0].detach().cpu().numpy()],
+        [flame_model.F],
+        offset=0.3
+    )
+
+
     # optimize for FACS_directions
     FACS_weights.requires_grad = False  # we will optimize this
     FACS_directions.requires_grad = True  # we will optimize this
