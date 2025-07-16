@@ -58,7 +58,7 @@ def render_pairs_of_meshes(Vs1, Fs1, Vs2, Fs2, image_path, scalar_field_1=None, 
     # Process and register meshes
     for i in range(len(Vs1)):
         # First mesh
-        V1 = Vs1[i] + np.array([-i*offset, 0, 0], dtype=np.float32)
+        V1 = Vs1[i] + np.array([0, -i*offset, 0], dtype=np.float32)
         F1 = Fs1[i]
         
         if scalar_field_1 is not None and i < len(scalar_field_1):
@@ -78,7 +78,7 @@ def render_pairs_of_meshes(Vs1, Fs1, Vs2, Fs2, image_path, scalar_field_1=None, 
             )
         
         # Second mesh
-        V2 = Vs2[i] + np.array([-i*offset, offset, 0], dtype=np.float32)
+        V2 = Vs2[i] + np.array([offset, -i*offset, 0], dtype=np.float32)
         F2 = Fs2[i]
         
         if scalar_field_2 is not None and i < len(scalar_field_2):
@@ -497,7 +497,7 @@ FACS_WEIGHT_ITERATIONS = 1000
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-evaluate_span_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002", 
-                          64, 200)
+# evaluate_span_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002", 
+#                           64, 200)
 
 evaluate_locality_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002")
