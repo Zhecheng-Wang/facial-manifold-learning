@@ -1,6 +1,7 @@
 import numpy as np
 import os, sys
 sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/src")
+sys.path.append("/scratch/ondemand29/evanpan/facial-manifold-learning/src")
 from utils import load_ARKit_blendshape
 from blendshapes import FLAMEBlendshapes, BasicBlendshapes
 import torch
@@ -31,6 +32,7 @@ def get_lm_indices_and_bary_weights_from_FLAME():
     """
     Returns the indices of the FLAME landmarks and their barycentric weights.
     """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     FLAME_facial_landmark_groups = {
         "jaw": list(range(7, 10)),  # 0-16: jawline points
         
@@ -50,12 +52,13 @@ def get_lm_indices_and_bary_weights_from_FLAME():
          # these are the row indices after we use barycentric coordinates to map to the landmarks
         lms_we_care_about.extend(FLAME_facial_landmark_groups[key])
     lms_we_care_about = np.array(lms_we_care_about, dtype=np.int64)
-    flameBS = FLAMEBlendshapes()
+    flameBS = FLAMEBlendshapes(device=device, dtype=torch.double)
+    flameBS.F = torch.from_numpy(flameBS.F).to(device=device, dtype=torch.int)  # (Faces, 3)
     # barcycentric weights, lms_we_care_about_can 
     flame_bary_weights = flameBS.flame.full_lmk_bary_coords[0, lms_we_care_about]
     flame_mesh_face_indices = flameBS.flame.full_lmk_faces_idx[0, lms_we_care_about]
 
-    full_bary_weights = torch.zeros((flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32)
+    full_bary_weights = torch.zeros((flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.double).to(device=device)
     for i in range(0, flame_mesh_face_indices.shape[0]):
         triangles = flameBS.F[flame_mesh_face_indices[i]]
         full_bary_weights[i, triangles] = flame_bary_weights[i]
@@ -66,7 +69,7 @@ def get_lm_indices_and_bary_weights_from_FLAME():
         grouped_flame_bary_weights = flameBS.flame.full_lmk_bary_coords[0, FLAME_facial_landmark_groups[key]]
         grouped_mesh_face_indices = flameBS.flame.full_lmk_faces_idx[0, FLAME_facial_landmark_groups[key]] # get the indices of the face
 
-        grouped_bary_weights = torch.zeros((grouped_flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32)
+        grouped_bary_weights = torch.zeros((grouped_flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.double).to(device=device)
         for i in range(0, grouped_mesh_face_indices.shape[0]):
             triangles = flameBS.F[grouped_mesh_face_indices[i]]
             grouped_bary_weights[i, triangles] = grouped_flame_bary_weights[i]
@@ -90,14 +93,14 @@ def get_lm_indices_from_ARKit():
     }
     lm_indices = [ARKIT_LM_DICT[key] for key in ARKIT_LM_DICT.keys()]
     lm_indices = np.concatenate(lm_indices, axis=0)
-    full_bary_weights = torch.zeros((lm_indices.shape[0], ARkitBS.V.shape[0]), dtype=torch.float32)
+    full_bary_weights = torch.zeros((lm_indices.shape[0], ARkitBS.V.shape[0]), dtype=torch.double)
 
     for i in range(0, lm_indices.shape[0]):
         full_bary_weights[i, lm_indices[i]] = 1.0  # Set the barycentric weight to 1 for the landmark vertex    
     
     grouped_ARKit_bary_weights_dict = {}
     for key in list(ARKIT_LM_DICT.keys()):
-        grouped_ARKit_bary_weights = torch.zeros((len(ARKIT_LM_DICT[key]), ARkitBS.V.shape[0]), dtype=torch.float32)
+        grouped_ARKit_bary_weights = torch.zeros((len(ARKIT_LM_DICT[key]), ARkitBS.V.shape[0]), dtype=torch.double)
         for i, lm_index in enumerate(ARKIT_LM_DICT[key]):
             grouped_ARKit_bary_weights[i, lm_index] = 1.0
         grouped_ARKit_bary_weights_dict[key] = grouped_ARKit_bary_weights
@@ -116,12 +119,10 @@ def get_frozen_mask():
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         flameBS = FLAMEBlendshapes(device=device)
         flame_lm_indices, flame_full_bary_weights, flame_lm_groups = get_lm_indices_and_bary_weights_from_FLAME()
-        flame_LM = flame_full_bary_weights @ flameBS.V
         # display_a_single_mesh(flameBS.V, flameBS.F, flame_LM.detach().numpy())
 
         ARkitBS = load_ARKit_blendshape()
         ARkit_lm_indices, ARkit_full_bary_weights, ARkit_lm_groups = get_lm_indices_from_ARKit()
-        ARkit_LM = ARkit_full_bary_weights @ ARkitBS.V
         all_lm_groups = list(flame_lm_groups.keys())
         frozen_LM_mask = []
         for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
@@ -160,6 +161,7 @@ def get_frozen_mask():
         # store frozen_LM_mask to a file
         frozen_LM_mask_path = os.path.join(LOCALITY_MASK_ROOT, f"frozen_LM_mask_ring_K={K}.pt")
         torch.save(frozen_LM_mask, frozen_LM_mask_path) 
+    return frozen_LM_mask
 
 class BatchedManualAdam:
     """Manual Adam implementation that handles batched parameters with independent momentum states."""
@@ -217,22 +219,11 @@ class BatchedManualAdam:
                 # Update parameters
                 param.add_(m_hat / (torch.sqrt(v_hat) + self.eps), alpha=-self.lr)
 
-
-
-DATA_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration/data"
-LOCALITY_MASK_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration/data/flame_model/FLAME_masks"
-K=5 # for flame, we use K=5 for landmark-based-freezing.
-WEIGHT_LEARN_RATE = 0.01
-FACS_WEIGHT_ITERATIONS = 1000
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-frozen_mask = get_frozen_mask()
-
 def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
+    global ROOT
+    
     # model_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_W_frozen_0p002"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
     # load the pickle_dataset:
     dataset_path = os.path.join(ROOT, "data/MeadRavdess/val_mead_ravdess_0.1.pickle")
     with open(dataset_path, "rb") as f:
@@ -270,8 +261,8 @@ def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
     FACS_directions = FACS_directions.double()
     FACS_directions.requires_grad = True  # we will optimize this
 
-    flame_full_bary_weights = flame_full_bary_weights.double().to(device)  # (Landmarks, Vertices)
-    ARkit_full_bary_weights = ARkit_full_bary_weights.double().to(device)
+    # flame_full_bary_weights = flame_full_bary_weights.double().to(device)  # (Landmarks, Vertices)
+    # ARkit_full_bary_weights = ARkit_full_bary_weights.double().to(device)
 
     shape_params_frames = torch.zeros((1, 100), device=device, dtype=torch.double)  # (Frames, 100)
     tex_params_frames = torch.zeros((1, 50), device=device, dtype=torch.double)  # (Frames, 50)
@@ -310,5 +301,18 @@ def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
             #     print(f"EM iteration {i}, fitting iteration {fitting_iter}: recon loss geometry: {recon_loss_geometry.item()}, l1 loss: {l1_loss.item()}")
         recon_MSE.append(recon_loss_geometry.item())        
         print(f"Batch {i}, fitting iteration {fitting_iter}: recon loss geometry: {recon_loss_geometry.item()}, l1 loss: {l1_loss.item()}")
-        
+    
+
+c = "/scratch/ondemand29/evanpan/facial-manifold-learning"
+DATA_ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning/data"
+LOCALITY_MASK_ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning/data/flame_model/FLAME_masks"
+K=5 # for flame, we use K=5 for landmark-based-freezing.
+WEIGHT_LEARN_RATE = 0.01
+FACS_WEIGHT_ITERATIONS = 1000
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+frozen_mask = get_frozen_mask()
+
+evaluate_span_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002", 128, 200)
 

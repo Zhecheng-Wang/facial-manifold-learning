@@ -1,6 +1,8 @@
 import numpy as np
 import os, sys
 sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/src")
+sys.path.append("/scratch/ondemand29/evanpan/facial-manifold-learning/src")
+
 from utils import load_ARKit_blendshape
 from blendshapes import FLAMEBlendshapes, BasicBlendshapes
 import torch
@@ -37,9 +39,9 @@ def get_lm_indices_and_bary_weights_from_FLAME():
     flame_bary_weights = flameBS.flame.full_lmk_bary_coords[0, lms_we_care_about]
     flame_mesh_face_indices = flameBS.flame.full_lmk_faces_idx[0, lms_we_care_about]
 
-    full_bary_weights = torch.zeros((flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32)
+    full_bary_weights = torch.zeros((flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32, device=flameBS.flame.device)
     for i in range(0, flame_mesh_face_indices.shape[0]):
-        triangles = flameBS.F[flame_mesh_face_indices[i]]
+        triangles = flameBS.F[flame_mesh_face_indices[i]].tolist()
         full_bary_weights[i, triangles] = flame_bary_weights[i]
 
     grouped_bary_weights_dict = {}
@@ -48,9 +50,9 @@ def get_lm_indices_and_bary_weights_from_FLAME():
         grouped_flame_bary_weights = flameBS.flame.full_lmk_bary_coords[0, FLAME_facial_landmark_groups[key]]
         grouped_mesh_face_indices = flameBS.flame.full_lmk_faces_idx[0, FLAME_facial_landmark_groups[key]] # get the indices of the face
 
-        grouped_bary_weights = torch.zeros((grouped_flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32)
+        grouped_bary_weights = torch.zeros((grouped_flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32, device=flameBS.flame.device)
         for i in range(0, grouped_mesh_face_indices.shape[0]):
-            triangles = flameBS.F[grouped_mesh_face_indices[i]]
+            triangles = flameBS.F[grouped_mesh_face_indices[i]].tolist()
             grouped_bary_weights[i, triangles] = grouped_flame_bary_weights[i]
         grouped_bary_weights_dict[key] = grouped_bary_weights
 
@@ -243,7 +245,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 flameBS = FLAMEBlendshapes(device=device)
 flame_lm_indices, flame_full_bary_weights, flame_lm_groups = get_lm_indices_and_bary_weights_from_FLAME()
-flame_LM = flame_full_bary_weights @ flameBS.V
+flame_LM = flame_full_bary_weights @ torch.from_numpy(flameBS.V).to(device).double()
 # display_a_single_mesh(flameBS.V, flameBS.F, flame_LM.detach().numpy())
 
 ARkitBS = load_ARKit_blendshape()
