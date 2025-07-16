@@ -348,6 +348,9 @@ flame_neutral = torch.unsqueeze(flame_neutral, dim=0)  # (1, Vertices, 3)
 
 losses_weights_recon = []
 losses_directions_recond = []
+
+V_bs_ARkit = ARkitBS.blendshapes + np.expand_dims(ARkitBS.V, axis=0)
+V_bs_ARkit = torch.from_numpy(V_bs_ARkit).to(device).double()  # (Blendshapes, Vertices, 3)
 for i in range(0, EM_ITERATIONS):
 # for i in range(0, 1):
     # initialize ADAM optimizers since we don't want interference between EM iterations
@@ -358,17 +361,10 @@ for i in range(0, EM_ITERATIONS):
     # fix the FACS directions
     FACS_directions.requires_grad = False  # we will optimize this
     FACS_weights.requires_grad = True  # we will optimize this
-<<<<<<< HEAD
-    for fitting_iter in range(0, 100):
-        FACS_based_weights = FACS_weights @ FACS_directions  # (Frames, 103)
-        recon_loss_latent = torch.norm(FACS_based_weights - weight, p=2, dim=-1).mean()
-        
-=======
     # update the shape and pose parameters iteratively
     for fitting_iter in range(0, EM_FACS_WEIGHT_ITERATIONS):
         FACS_based_weights = (FACS_weights ** 2) @ FACS_directions  # (Frames, 103)
         # latent based reconstruction loss (we ignore these for now)        
->>>>>>> refs/remotes/origin/evan
         V_bs, _, _ = flame_module(shape_params_frames, FACS_based_weights[:, :100], pose_params=torch.concat([pose_params_frames, FACS_based_weights[:, 100:103]], dim=1))
         V_gt, _, _ = flame_module(shape_params_frames, weight[:, :100], pose_params=torch.concat([pose_params_frames, weight[:, 100:]], dim=1))
         recon_loss_geometry = torch.norm(V_bs - V_gt, p=2, dim=-1).mean()  # (Frames, Vertices)
@@ -419,7 +415,7 @@ for i in range(0, EM_ITERATIONS):
         frozen_loss = frozen_loss.mean()
         # compute LM loss
         flame_LM = flame_full_bary_weights @ V_bs  # (Frames, Vert
-        AR_kit_LM = ARkit_full_bary_weights @ ARkitBS.V  # (Frames, Vertices, 3)
+        AR_kit_LM = ARkit_full_bary_weights @ V_bs_ARkit  # (Frames, Vertices, 3)
         lm_loss = torch.norm(flame_LM - AR_kit_LM, p=2, dim=-1).mean()
         loss = recon_loss_geometry + W_REG * (lm_loss + frozen_loss * W_FROZEN)  # add the frozen loss
         loss.backward()

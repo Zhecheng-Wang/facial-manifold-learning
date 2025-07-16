@@ -219,6 +219,63 @@ class BatchedManualAdam:
                 # Update parameters
                 param.add_(m_hat / (torch.sqrt(v_hat) + self.eps), alpha=-self.lr)
 
+def evaluate_locality_FLAME_BASED(model_path):
+    global ROOT, frozen_mask, LOCALITY_MASK_ROOT
+    # model_path = "/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002"
+    frozen_mask = get_frozen_mask()
+    frozen_mask.shape
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    flameBS = FLAMEBlendshapes(device=device, dtype=torch.double)
+    flame_lm_indices, flame_full_bary_weights, flame_lm_groups = get_lm_indices_and_bary_weights_from_FLAME()
+    flame_LM = flame_full_bary_weights @ torch.from_numpy(flameBS.V).to(device).double()
+    # display_a_single_mesh(flameBS.V, flameBS.F, flame_LM.detach().numpy())
+
+    ARkitBS = load_ARKit_blendshape()
+    ARkit_lm_indices, ARkit_full_bary_weights, ARkit_lm_groups = get_lm_indices_from_ARKit()
+    ARkit_LM = ARkit_full_bary_weights @ ARkitBS.V
+
+    all_lm_groups = list(flame_lm_groups.keys())
+
+    FACS_directions = []
+    for i in range(0, 51):
+        exp_path = os.path.join(model_path, f"exp_params_{i}.npy")
+        jaw_path = os.path.join(model_path, f"jaw_params_{i}.npy")
+        exp_params = np.load(exp_path)
+        jaw_params = np.load(jaw_path)
+        FACS_directions.append(np.concatenate([exp_params, jaw_params], axis=1))
+
+    # load weights to torch tensor
+    FACS_directions = np.concatenate(FACS_directions, dtype=np.double, axis=0)
+    FACS_directions = torch.from_numpy(FACS_directions).to(device)
+    FACS_directions = FACS_directions.double()
+    FACS_directions.requires_grad = True
+    shape_params_FACS = torch.zeros([51, 100]).to(device).double()
+    tex_params_FACS = torch.zeros([51, 50]).to(device).double()
+    pose_params_FACS = torch.zeros([51, 3]).to(device).double()
+    flame_full_bary_weights = flame_full_bary_weights.double().to(device)  # (Landmarks, Vertices)
+    ARkit_full_bary_weights = ARkit_full_bary_weights.double().to(device)
+    flame_module = flameBS.flame
+    flame_neutral = torch.from_numpy(flameBS.V).to(device).double()  # (Vertices, 3)
+
+
+    exp_params = FACS_directions[:, :100]
+    jaw_params = FACS_directions[:, 100:103]
+    V_bs_facs, _, _ = flame_module(shape_params_FACS, exp_params, 
+                                    pose_params=torch.concat([pose_params_FACS, jaw_params], dim=1))
+    frozen_loss = torch.norm(V_bs_facs - flame_neutral, p=2, dim=-1) * torch.unsqueeze(frozen_mask, dim=0)
+    frozen_loss = frozen_loss.mean()
+    V_bs_ARkit = ARkitBS.blendshapes + np.expand_dims(ARkitBS.V, axis=0)
+    V_bs_ARkit = torch.from_numpy(V_bs_ARkit).to(device).double()  # (Blendshapes, Vertices, 3)
+    # Compute LM loss
+
+
+    flame_LM = flame_full_bary_weights @ V_bs_facs
+    AR_kit_LM = ARkit_full_bary_weights @ V_bs_ARkit
+    lm_loss = torch.norm(flame_LM - AR_kit_LM, p=2, dim=-1).mean()
+
+
+
+
 def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
     global ROOT
     
@@ -302,6 +359,9 @@ def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
         recon_MSE.append(recon_loss_geometry.item())        
         print(f"Batch {i}, fitting iteration {fitting_iter}: recon loss geometry: {recon_loss_geometry.item()}, l1 loss: {l1_loss.item()}")
         # save the recon_MSE and weights:
+        recon_MSE_path = os.path.join(model_path, f"recon_MSE.npy")
+        recon_MSE_to_save = np.array(recon_MSE)
+        np.save(recon_MSE_path, recon_MSE_to_save)
 
 
 
@@ -316,7 +376,7 @@ FACS_WEIGHT_ITERATIONS = 1000
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-frozen_mask = get_frozen_mask()
+evaluate_span_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002", 
+                          64, 200)
 
-evaluate_span_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002", 128, 200)
 
