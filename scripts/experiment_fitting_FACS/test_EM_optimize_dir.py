@@ -415,7 +415,7 @@ for i in range(0, EM_ITERATIONS):
         frozen_loss = frozen_loss.mean()
         # compute LM loss
         flame_LM = flame_full_bary_weights @ V_bs  # (Frames, Vert
-        AR_kit_LM = ARkit_full_bary_weights @ ARkitBS.V  # (Frames, Vertices, 3)
+        AR_kit_LM = ARkit_full_bary_weights @ V_bs_ARkit  # (Frames, Vertices, 3)
         lm_loss = torch.norm(flame_LM - AR_kit_LM, p=2, dim=-1).mean()
         loss = recon_loss_geometry + W_REG * (lm_loss + frozen_loss * W_FROZEN)  # add the frozen loss
         loss.backward()
