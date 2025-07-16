@@ -211,7 +211,61 @@ class BatchedManualAdam:
                 # Update parameters
                 param.add_(m_hat / (torch.sqrt(v_hat) + self.eps), alpha=-self.lr)
 
- 
+def get_frozen_mask():
+    global LOCALITY_MASK_ROOT, K
+    
+    frozen_LM_mask_path = os.path.join(LOCALITY_MASK_ROOT, f"frozen_LM_mask_ring_K={K}.pt")
+    if os.path.exists(frozen_LM_mask_path):
+        frozen_LM_mask = torch.load(frozen_LM_mask_path)
+        print(f"Loaded frozen LM mask from {frozen_LM_mask_path}")
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        flameBS = FLAMEBlendshapes(device=device)
+        flame_lm_indices, flame_full_bary_weights, flame_lm_groups = get_lm_indices_and_bary_weights_from_FLAME()
+        # display_a_single_mesh(flameBS.V, flameBS.F, flame_LM.detach().numpy())
+
+        ARkitBS = load_ARKit_blendshape()
+        ARkit_lm_indices, ARkit_full_bary_weights, ARkit_lm_groups = get_lm_indices_from_ARKit()
+        all_lm_groups = list(flame_lm_groups.keys())
+        frozen_LM_mask = []
+        for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
+            print(f"Processing blendshape {bs_i} of {ARkitBS.blendshapes.shape[0]}")
+            involved_lm_groups = compute_landmark_groups_of_blendshape(ARkitBS.V, ARkitBS.blendshapes[bs_i] + ARkitBS.V, ARkit_lm_groups)
+            # generate the indices of the landmarks we care about
+            involved_lm_indices = []
+            for key in involved_lm_groups:
+                barycentric_coord_matrix = flame_lm_groups[key]
+                for lm_i in range(barycentric_coord_matrix.shape[0]):
+                    for v_i in range(barycentric_coord_matrix.shape[1]):
+                        if barycentric_coord_matrix[lm_i, v_i] > 0.0:
+                            involved_lm_indices.append(v_i)
+
+            # these are the ones we want frozen
+            non_involved_lm_indices = []
+            for key in all_lm_groups:
+                if key not in involved_lm_groups:
+                    barycentric_coord_matrix = flame_lm_groups[key]
+                    for lm_i in range(barycentric_coord_matrix.shape[0]):
+                        for v_i in range(barycentric_coord_matrix.shape[1]):
+                            if barycentric_coord_matrix[lm_i, v_i] > 0.0:
+                                non_involved_lm_indices.append(v_i)
+
+            non_frozen_set, frozen_set = compute_vertex_assignments(flameBS.V, flameBS.F,
+                key_point_set_A=involved_lm_indices,
+                key_point_set_B=non_involved_lm_indices,
+                K=K)
+            non_frozen_set = list(non_frozen_set)
+            frozen_set = list(frozen_set)
+            frozen_set_mat = torch.zeros(flameBS.V.shape, dtype=torch.double, device=device)
+            frozen_set_mat[frozen_set, :] = 1.0  # set the frozen set to 1.0
+            frozen_LM_mask.append(frozen_set_mat)
+        frozen_LM_mask = torch.stack(frozen_LM_mask, dim=0)  # (blendshapes, vertices, 3)
+        frozen_LM_mask = frozen_LM_mask[:, :, 0]
+        # store frozen_LM_mask to a file
+        frozen_LM_mask_path = os.path.join(LOCALITY_MASK_ROOT, f"frozen_LM_mask_ring_K={K}.pt")
+        torch.save(frozen_LM_mask, frozen_LM_mask_path) 
+    return frozen_LM_mask
+
 # Parameters for optimizing mesh deformations 
 LEARNING_RATE = 0.03
 ITERATIONS = 5000
@@ -221,12 +275,21 @@ CLIPS_OF_DATA = 1
 # em parameters
 EM_LEARNING_RATE = 0.00003
 EM_WEIGHT_LEARN_RATE = 0.01
-W_FROZEN = 0.0005
+W_FROZEN = 0.001
 EM_ITERATIONS = 10
 EM_FACS_WEIGHT_ITERATIONS = 1000
 EM_FACS_DIRE_ITERATIONS = 100
 W_REG = 1000
 seed = 42
+
+
+LOCALITY_MASK_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration/data/flame_model/Locality_masks"
+surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_W_frozen_0p002"
+ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
+save_root = os.path.join(surrogate_model_root_path, "EM_optimized_FACS_directions_geometry_based")
+
+
+
 np.random.seed(seed)
 torch.manual_seed(seed)
 
@@ -244,46 +307,11 @@ ARkitBS = load_ARKit_blendshape()
 ARkit_lm_indices, ARkit_full_bary_weights, ARkit_lm_groups = get_lm_indices_from_ARKit()
 ARkit_LM = ARkit_full_bary_weights @ ARkitBS.V
 # display_a_single_mesh(ARkitBS.V, ARkitBS.F, ARkit_LM)
+frozen_LM_mask = get_frozen_mask()  # (Blendshapes, Vertices)
 
-all_lm_groups = list(flame_lm_groups.keys())
-
-frozen_LM_mask = []
-for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
-    print(f"Processing blendshape {bs_i} of {ARkitBS.blendshapes.shape[0]}")
-    involved_lm_groups = compute_landmark_groups_of_blendshape(ARkitBS.V, ARkitBS.blendshapes[bs_i] + ARkitBS.V, ARkit_lm_groups)
-    # generate the indices of the landmarks we care about
-    involved_lm_indices = []
-    for key in involved_lm_groups:
-        barycentric_coord_matrix = flame_lm_groups[key]
-        for lm_i in range(barycentric_coord_matrix.shape[0]):
-            for v_i in range(barycentric_coord_matrix.shape[1]):
-                if barycentric_coord_matrix[lm_i, v_i] > 0.0:
-                    involved_lm_indices.append(v_i)
-
-    # these are the ones we want frozen
-    non_involved_lm_indices = []
-    for key in all_lm_groups:
-        if key not in involved_lm_groups:
-            barycentric_coord_matrix = flame_lm_groups[key]
-            for lm_i in range(barycentric_coord_matrix.shape[0]):
-                for v_i in range(barycentric_coord_matrix.shape[1]):
-                    if barycentric_coord_matrix[lm_i, v_i] > 0.0:
-                        non_involved_lm_indices.append(v_i)
-
-    non_frozen_set, frozen_set = compute_vertex_assignments(flameBS.V, flameBS.F,
-        key_point_set_A=involved_lm_indices,
-        key_point_set_B=non_involved_lm_indices,
-        K=K)
-    non_frozen_set = list(non_frozen_set)
-    frozen_set = list(frozen_set)
-    frozen_set_mat = torch.zeros(flameBS.V.shape, dtype=torch.double, device=device)
-    frozen_set_mat[frozen_set, :] = 1.0  # set the frozen set to 1.0
-    frozen_LM_mask.append(frozen_set_mat)
-frozen_LM_mask = torch.stack(frozen_LM_mask, dim=0)  # (blendshapes, vertices, 3)
-frozen_LM_mask = frozen_LM_mask[:, :, 0]
 
 ############### loading initialized weights ##################
-surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_W_frozen_0p002"
+
 # surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test/"
 flame = FLAMEBlendshapes()
 FACS_directions = []
@@ -301,7 +329,6 @@ FACS_directions = FACS_directions.double()
 FACS_directions.requires_grad = True  # we will optimize this
 ############### load reference data ##################
 # ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning"
-ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
 # load the pickle_dataset:
 dataset_path = os.path.join(ROOT, "data/MeadRavdess/val_mead_ravdess_0.1.pickle")
 with open(dataset_path, "rb") as f:
@@ -385,15 +412,15 @@ for i in range(0, EM_ITERATIONS):
     # plt.bar(np.arange(0, weight[0].shape[0]), weight[0].detach().cpu().numpy(), alpha=0.5)
 
     # show the geometry
-    V_bs, _, _ = flame_module(shape_params_frames, FACS_based_weights[:, :100], pose_params=torch.concat([pose_params_frames, FACS_based_weights[:, 100:103]], dim=1))
-    V_gt, _, _ = flame_module(shape_params_frames, weight[:, :100], pose_params=torch.concat([pose_params_frames, weight[:, 100:]], dim=1))
-    display_pairs_of_meshes(
-        [V_bs[0].detach().cpu().numpy()],
-        [flame_model.F],
-        [V_gt[0].detach().cpu().numpy()],
-        [flame_model.F],
-        offset=0.3
-    )
+    # V_bs, _, _ = flame_module(shape_params_frames, FACS_based_weights[:, :100], pose_params=torch.concat([pose_params_frames, FACS_based_weights[:, 100:103]], dim=1))
+    # V_gt, _, _ = flame_module(shape_params_frames, weight[:, :100], pose_params=torch.concat([pose_params_frames, weight[:, 100:]], dim=1))
+    # display_pairs_of_meshes(
+    #     [V_bs[0].detach().cpu().numpy()],
+    #     [flame_model.F],
+    #     [V_gt[0].detach().cpu().numpy()],
+    #     [flame_model.F],
+    #     offset=0.3
+    # )
 
 
     # optimize for FACS_directions
@@ -439,7 +466,6 @@ for i in range(0, EM_ITERATIONS):
         
     
     # load the 
-save_root = os.path.join(surrogate_model_root_path, "EM_optimized_FACS_directions_geometry_based")
 
 if not os.path.exists(save_root):
     os.makedirs(save_root)
@@ -449,6 +475,8 @@ FACS_directions_np = FACS_directions.detach().cpu().numpy()
 for i in range(FACS_directions_np.shape[0]):
     exp_params = FACS_directions_np[i][:100]
     jaw_params = FACS_directions_np[i][100:]
+    exp_params = exp_params.reshape(1, -1)  # reshape to (1, 100)
+    jaw_params = jaw_params.reshape(1, -1)  # reshape to (1
     np.save(os.path.join(save_root, f"exp_params_{i}.npy"), exp_params)
     np.save(os.path.join(save_root, f"jaw_params_{i}.npy"), jaw_params)
 

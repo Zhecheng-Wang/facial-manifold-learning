@@ -10,101 +10,6 @@ import polyscope.imgui as psim
 from scripts.experiment_different_kinds_of_partial_freezing.naive_autosegmentation import compute_vertex_assignments
 import pickle
 
-def render_pairs_of_meshes(Vs1, Fs1, Vs2, Fs2, image_path, scalar_field_1=None, scalar_field_2=None, offset=0.3):
-    """
-    Render pairs of meshes to an image with optional heat map coloring.
-    
-    Parameters:
-    - Vs1, Fs1: Lists of vertices and faces for first set of meshes
-    - Vs2, Fs2: Lists of vertices and faces for second set of meshes
-    - image_path: Path where the rendered image will be saved
-    - scalar_field_1: List of per-vertex scalar values for first meshes (optional)
-    - scalar_field_2: List of per-vertex scalar values for second meshes (optional)
-    - offset: Spacing between mesh pairs
-    """
-    
-    # Initialize Polyscope
-    ps.remove_all_structures()
-    ps.set_verbosity(0)
-    ps.init()
-    ps.set_ground_plane_mode("none")
-    ps.set_view_projection_mode("orthographic")
-    ps.set_front_dir("z_front")
-    ps.set_background_color([0, 0, 0])
-    
-    # Define heat map colormap (blue to red)
-    def get_heatmap_colors(scalar_values):
-        """Convert scalar values to RGB colors using a heat map."""
-        if scalar_values is None:
-            return None
-        
-        # Normalize scalar values to [0, 1]
-        scalar_values = np.array(scalar_values)
-        min_val = np.min(scalar_values)
-        max_val = np.max(scalar_values)
-        
-        if max_val == min_val:
-            # If all values are the same, use middle color
-            normalized = np.full_like(scalar_values, 0.5)
-        else:
-            normalized = (scalar_values - min_val) / (max_val - min_val)
-        
-        # Create colormap (blue to red heat map)
-        colors = plt.cm.coolwarm(normalized)[:, :3]  # Take only RGB, drop alpha
-        return colors
-    
-    # Process and register meshes
-    for i in range(len(Vs1)):
-        # First mesh
-        V1 = Vs1[i] + np.array([-i*offset, 0, 0], dtype=np.float32)
-        F1 = Fs1[i]
-        
-        if scalar_field_1 is not None and i < len(scalar_field_1):
-            # Use heat map coloring for first mesh
-            colors1 = get_heatmap_colors(scalar_field_1[i])
-            mesh1 = ps.register_surface_mesh(
-                f"mesh_{i}_1", V1, F1,
-                edge_width=0.25
-            )
-            mesh1.add_color_quantity("heat_map", colors1, enabled=True)
-        else:
-            # Use default gray color
-            ps.register_surface_mesh(
-                f"mesh_{i}_1", V1, F1,
-                color=[0.5, 0.5, 0.5],
-                edge_width=0.25
-            )
-        
-        # Second mesh
-        V2 = Vs2[i] + np.array([-i*offset, offset, 0], dtype=np.float32)
-        F2 = Fs2[i]
-        
-        if scalar_field_2 is not None and i < len(scalar_field_2):
-            # Use heat map coloring for second mesh
-            colors2 = get_heatmap_colors(scalar_field_2[i])
-            mesh2 = ps.register_surface_mesh(
-                f"mesh_{i}_2", V2, F2,
-                edge_width=0.25
-            )
-            mesh2.add_color_quantity("heat_map", colors2, enabled=True)
-        else:
-            # Use default gray color
-            ps.register_surface_mesh(
-                f"mesh_{i}_2", V2, F2,
-                color=[0.5, 0.5, 0.5],
-                edge_width=0.25
-            )
-    
-    # Set camera and render
-    ps.reset_camera_to_home_view()
-    
-    # Save screenshot
-    ps.screenshot(image_path, transparent_bg=False)
-    
-    # Clean up
-    ps.remove_all_structures()
-
-
 def compute_landmark_groups_of_blendshape(V_0, V_bs, landmark_groups):
     # V_0 = ARkitBS.V
     # V_bs = ARkitBS.blendshapes[0] + ARkitBS.V
@@ -332,13 +237,13 @@ def evaluate_locality_FLAME_BASED(model_path):
     all_lm_groups = list(flame_lm_groups.keys())
 
     FACS_directions = []
+    i = 0
     for i in range(0, 51):
         exp_path = os.path.join(model_path, f"exp_params_{i}.npy")
         jaw_path = os.path.join(model_path, f"jaw_params_{i}.npy")
         exp_params = np.load(exp_path)
         jaw_params = np.load(jaw_path)
         FACS_directions.append(np.concatenate([exp_params, jaw_params], axis=1))
-
     # load weights to torch tensor
     FACS_directions = np.concatenate(FACS_directions, dtype=np.double, axis=0)
     FACS_directions = torch.from_numpy(FACS_directions).to(device)
@@ -367,9 +272,6 @@ def evaluate_locality_FLAME_BASED(model_path):
     flame_LM = flame_full_bary_weights @ V_bs_facs
     AR_kit_LM = ARkit_full_bary_weights @ V_bs_ARkit
     lm_loss = torch.norm(flame_LM - AR_kit_LM, p=2, dim=-1).mean()
-
-
-
 
 def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
     global ROOT
@@ -459,9 +361,8 @@ def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
         np.save(recon_MSE_path, recon_MSE_to_save)
 
 
-
-
-ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning"
+# ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning"
+ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
 DATA_ROOT = os.path.join(ROOT, "data")
 LOCALITY_MASK_ROOT = os.path.join(DATA_ROOT, "flame_model", "FLAME_masks")
 
@@ -471,7 +372,8 @@ FACS_WEIGHT_ITERATIONS = 1000
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-evaluate_span_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002", 
-                          64, 200)
+# evaluate_span_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002", 
+#                           64, 200)
 
-
+evaluate_locality_FLAME_BASED("/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002/EM_optimized_FACS_directions_geometry_based")
+model_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002/EM_optimized_FACS_directions_geometry_based"
