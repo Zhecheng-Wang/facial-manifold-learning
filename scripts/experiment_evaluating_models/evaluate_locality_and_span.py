@@ -301,11 +301,15 @@ def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
             #     print(f"EM iteration {i}, fitting iteration {fitting_iter}: recon loss geometry: {recon_loss_geometry.item()}, l1 loss: {l1_loss.item()}")
         recon_MSE.append(recon_loss_geometry.item())        
         print(f"Batch {i}, fitting iteration {fitting_iter}: recon loss geometry: {recon_loss_geometry.item()}, l1 loss: {l1_loss.item()}")
-    
+        # save the recon_MSE and weights:
 
-c = "/scratch/ondemand29/evanpan/facial-manifold-learning"
-DATA_ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning/data"
-LOCALITY_MASK_ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning/data/flame_model/FLAME_masks"
+
+
+
+ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning"
+DATA_ROOT = os.path.join(ROOT, "data")
+LOCALITY_MASK_ROOT = os.path.join(DATA_ROOT, "flame_model", "FLAME_masks")
+
 K=5 # for flame, we use K=5 for landmark-based-freezing.
 WEIGHT_LEARN_RATE = 0.01
 FACS_WEIGHT_ITERATIONS = 1000
