@@ -415,7 +415,7 @@ for i in range(0, EM_ITERATIONS):
         frozen_loss = frozen_loss.mean()
         # compute LM loss
         flame_LM = flame_full_bary_weights @ V_bs  # (Frames, Vert
-        AR_kit_LM = ARkit_full_bary_weights @ V_bs_ARkit  # (Frames, Vertices, 3)
+        AR_kit_LM = ARkit_full_bary_weights @ ARkitBS.V  # (Frames, Vertices, 3)
         lm_loss = torch.norm(flame_LM - AR_kit_LM, p=2, dim=-1).mean()
         loss = recon_loss_geometry + W_REG * (lm_loss + frozen_loss * W_FROZEN)  # add the frozen loss
         loss.backward()
@@ -443,7 +443,7 @@ save_root = os.path.join(surrogate_model_root_path, "EM_optimized_FACS_direction
 
 if not os.path.exists(save_root):
     os.makedirs(save_root)
-save_root
+
 FACS_directions_np = FACS_directions.detach().cpu().numpy()
 
 for i in range(FACS_directions_np.shape[0]):
