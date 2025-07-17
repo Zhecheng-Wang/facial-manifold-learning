@@ -154,16 +154,15 @@ def compute_landmark_groups_of_blendshape(V_0, V_bs, landmark_groups):
         if diff_mag >= 1E-4:
             involved_lm_groups.append(key)
     return involved_lm_groups
-    
+        
+
  
 # compute_landmark_groups_of_blendshape(ARkitBS.V, ARkitBS.blendshapes[0], ARkit_lm_groups)
 
 LEARNING_RATE = 0.03
 ITERATIONS = 5000
 W_FROZEN = 0.0005
-K=5
-LOCALITY_MASK_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration/data/flame_model/Locality_masks"
-neighborhood_distance = 0.02
+neighborhood_distance=0.02
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 flameBS = FLAMEBlendshapes(device=device)
@@ -200,10 +199,10 @@ for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
                     if barycentric_coord_matrix[lm_i, v_i] > 0.0:
                         non_involved_lm_indices.append(v_i)
 
-    non_frozen_set, frozen_set = compute_weighted_vertex_assignments(flameBS.V, flameBS.F,
+    non_frozen_set, frozen_set = (flameBS.V, flameBS.F,
         key_point_set_A=involved_lm_indices,
         key_point_set_B=non_involved_lm_indices,
-        neighborhood_distance=neighborhood_distance)
+        max_distance=neighborhood_distance)
     non_frozen_set = list(non_frozen_set)
     frozen_set = list(frozen_set)
     
@@ -260,7 +259,7 @@ for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
 
 flame_param_dires = [[x[0].detach().cpu().numpy(), x[1].detach().cpu().numpy()] for x in flame_param_dires]
 # save these
-save_root = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_correctly_frozen_K=5, "
+save_root = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_weighted_geodesic_frozen_ND=0p02, "
 if not os.path.exists(save_root):
     os.makedirs(save_root)
 for i in range(len(flame_param_dires)):

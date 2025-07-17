@@ -67,6 +67,38 @@ def compute_geodesic_distances(adjacency: Dict[int, Set[int]],
     
     return distances
 
+def compute_weighted_geodesic_distances(vertices, adjacency, start_vertices, max_distance=None):
+    """Dijkstra's algorithm using actual edge lengths instead of edge count"""
+    import heapq
+    
+    distances = {}
+    heap = []
+    
+    # Initialize with start vertices
+    for start_v in start_vertices:
+        distances[start_v] = 0.0
+        heapq.heappush(heap, (0.0, start_v))
+    
+    while heap:
+        current_dist, current_vertex = heapq.heappop(heap)
+        
+        if current_vertex in distances and distances[current_vertex] < current_dist:
+            continue
+            
+        if max_distance is not None and current_dist >= max_distance:
+            continue
+        
+        for neighbor in adjacency.get(current_vertex, []):
+            # Use actual edge length
+            edge_length = np.linalg.norm(vertices[neighbor] - vertices[current_vertex])
+            new_dist = current_dist + edge_length
+            
+            if neighbor not in distances or distances[neighbor] > new_dist:
+                distances[neighbor] = new_dist
+                heapq.heappush(heap, (new_dist, neighbor))
+    
+    return distances
+
 def compute_vertex_assignments(vertices: np.ndarray, 
                              faces: np.ndarray,
                              key_point_set_A: List[int], 
@@ -104,10 +136,83 @@ def compute_vertex_assignments(vertices: np.ndarray,
     set_A = vertices_near_A - vertices_near_B
     
     # set_B: all remaining vertices
-    all_vertices = set(range(len(vertices)))
-    set_B = all_vertices - set_A
+    set_B = vertices_near_B
     
     return set_A, set_B
+
+def compute_weighted_vertex_assignments(vertices: np.ndarray,
+                                        faces: np.ndarray,
+                                        key_point_set_A: List[int],
+                                        key_point_set_B: List[int],
+                                        max_distance: int) -> Tuple[Set[int], Set[int]]:
+    """
+    Compute weighted vertex assignments based on geodesic distances from key point sets.
+    """
+    # Build adjacency list
+    adjacency = build_adjacency_list(vertices, faces)
+
+    # Compute distances from key point sets
+    distances_A = compute_weighted_geodesic_distances(vertices, adjacency, key_point_set_A, max_distance)
+    distances_B = compute_weighted_geodesic_distances(vertices, adjacency, key_point_set_B, max_distance)
+
+    # Find vertices within K edges of key_point_set_A
+    vertices_near_A = {v for v, dist in distances_A.items() if dist <= max_distance}
+
+    # Find vertices within K edges of key_point_set_B
+    vertices_near_B = {v for v, dist in distances_B.items() if dist <= max_distance}
+
+    # set_A: vertices within K edges of A but NOT within K edges of B
+    set_A = vertices_near_A - vertices_near_B
+
+    # set_B: all remaining vertices
+    set_B = vertices_near_B
+
+    return set_A, set_B
+
+def compute_heat_diffusion_assignment(vertices, faces, seed_A, seed_B, time_steps=10, dt=0.1):
+    """Use heat diffusion to propagate influence from seed vertices"""
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.linalg import spsolve
+    
+    n_vertices = len(vertices)
+    
+    # Build Laplacian matrix
+    adjacency = build_adjacency_list(vertices, faces)
+    row, col, data = [], [], []
+    
+    for v, neighbors in adjacency.items():
+        degree = len(neighbors)
+        row.append(v)
+        col.append(v)
+        data.append(degree)
+        
+        for n in neighbors:
+            row.append(v)
+            col.append(n)
+            data.append(-1)
+    
+    L = csr_matrix((data, (row, col)), shape=(n_vertices, n_vertices))
+    
+    # Initialize heat values
+    heat_A = np.zeros(n_vertices)
+    heat_B = np.zeros(n_vertices)
+    heat_A[seed_A] = 1.0
+    heat_B[seed_B] = 1.0
+    
+    # Diffuse heat
+    I = csr_matrix(np.eye(n_vertices))
+    for _ in range(time_steps):
+        heat_A = spsolve(I + dt * L, heat_A)
+        heat_B = spsolve(I + dt * L, heat_B)
+    
+    # Assign vertices based on which heat value is stronger
+    set_A = set(np.where(heat_A > heat_B)[0])
+    set_B = set(np.where(heat_B >= heat_A)[0])
+    # set_A = set_A - set_B  
+    
+    return set_A, set_B
+    
+
 
 def visualize_assignments(vertices: np.ndarray,
                          faces: np.ndarray,

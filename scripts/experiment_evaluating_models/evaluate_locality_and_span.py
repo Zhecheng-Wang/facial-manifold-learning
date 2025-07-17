@@ -7,7 +7,7 @@ from blendshapes import FLAMEBlendshapes, BasicBlendshapes
 import torch
 import polyscope as ps
 import polyscope.imgui as psim
-from scripts.experiment_different_kinds_of_partial_freezing.naive_autosegmentation import compute_vertex_assignments
+from scripts.experiment_different_kinds_of_partial_freezing.naive_autosegmentation import *
 import pickle
 from matplotlib import pyplot as plt
 
@@ -79,100 +79,6 @@ def render_pairs_of_meshes(Vs1, Fs1, Vs2, Fs2, image_path, scalar_field_1=None, 
         
         # Second mesh
         V2 = Vs2[i] + np.array([offset, -i*offset, 0], dtype=np.float32)
-        F2 = Fs2[i]
-        
-        if scalar_field_2 is not None and i < len(scalar_field_2):
-            # Use heat map coloring for second mesh
-            colors2 = get_heatmap_colors(scalar_field_2[i])
-            mesh2 = ps.register_surface_mesh(
-                f"mesh_{i}_2", V2, F2,
-                edge_width=0.25
-            )
-            mesh2.add_color_quantity("heat_map", colors2, enabled=True)
-        else:
-            # Use default gray color
-            ps.register_surface_mesh(
-                f"mesh_{i}_2", V2, F2,
-                color=[0.5, 0.5, 0.5],
-                edge_width=0.25
-            )
-    
-    # Set camera and render
-    ps.reset_camera_to_home_view()
-    
-    # Save screenshot
-    ps.screenshot(image_path, transparent_bg=False)
-    
-    # Clean up
-    ps.remove_all_structures()
-
-def render_pairs_of_meshes(Vs1, Fs1, Vs2, Fs2, image_path, scalar_field_1=None, scalar_field_2=None, offset=0.3):
-    """
-    Render pairs of meshes to an image with optional heat map coloring.
-    
-    Parameters:
-    - Vs1, Fs1: Lists of vertices and faces for first set of meshes
-    - Vs2, Fs2: Lists of vertices and faces for second set of meshes
-    - image_path: Path where the rendered image will be saved
-    - scalar_field_1: List of per-vertex scalar values for first meshes (optional)
-    - scalar_field_2: List of per-vertex scalar values for second meshes (optional)
-    - offset: Spacing between mesh pairs
-    """
-    
-    # Initialize Polyscope
-    ps.remove_all_structures()
-    ps.set_verbosity(0)
-    ps.init()
-    ps.set_ground_plane_mode("none")
-    ps.set_view_projection_mode("orthographic")
-    ps.set_front_dir("z_front")
-    ps.set_background_color([0, 0, 0])
-    
-    # Define heat map colormap (blue to red)
-    def get_heatmap_colors(scalar_values):
-        """Convert scalar values to RGB colors using a heat map."""
-        if scalar_values is None:
-            return None
-        
-        # Normalize scalar values to [0, 1]
-        scalar_values = np.array(scalar_values)
-        min_val = np.min(scalar_values)
-        max_val = np.max(scalar_values)
-        
-        if max_val == min_val:
-            # If all values are the same, use middle color
-            normalized = np.full_like(scalar_values, 0.5)
-        else:
-            normalized = (scalar_values - min_val) / (max_val - min_val)
-        
-        # Create colormap (blue to red heat map)
-        colors = plt.cm.coolwarm(normalized)[:, :3]  # Take only RGB, drop alpha
-        return colors
-    
-    # Process and register meshes
-    for i in range(len(Vs1)):
-        # First mesh
-        V1 = Vs1[i] + np.array([-i*offset, 0, 0], dtype=np.float32)
-        F1 = Fs1[i]
-        
-        if scalar_field_1 is not None and i < len(scalar_field_1):
-            # Use heat map coloring for first mesh
-            colors1 = get_heatmap_colors(scalar_field_1[i])
-            mesh1 = ps.register_surface_mesh(
-                f"mesh_{i}_1", V1, F1,
-                edge_width=0.25
-            )
-            mesh1.add_color_quantity("heat_map", colors1, enabled=True)
-        else:
-            # Use default gray color
-            ps.register_surface_mesh(
-                f"mesh_{i}_1", V1, F1,
-                color=[0.5, 0.5, 0.5],
-                edge_width=0.25
-            )
-        
-        # Second mesh
-        V2 = Vs2[i] + np.array([-i*offset, offset, 0], dtype=np.float32)
         F2 = Fs2[i]
         
         if scalar_field_2 is not None and i < len(scalar_field_2):
@@ -300,7 +206,7 @@ def get_lm_indices_from_ARKit():
     return lm_indices.tolist(), full_bary_weights, grouped_ARKit_bary_weights_dict
 
 def get_frozen_mask():
-    global LOCALITY_MASK_ROOT, K
+    global LOCALITY_MASK_ROOT, neighborhood_distance
     
     frozen_LM_mask_path = os.path.join(LOCALITY_MASK_ROOT, f"frozen_LM_mask_ring_K={K}.pt")
     if os.path.exists(frozen_LM_mask_path):
@@ -317,6 +223,7 @@ def get_frozen_mask():
         all_lm_groups = list(flame_lm_groups.keys())
         frozen_LM_mask = []
         for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
+            # bs_i = 0
             print(f"Processing blendshape {bs_i} of {ARkitBS.blendshapes.shape[0]}")
             involved_lm_groups = compute_landmark_groups_of_blendshape(ARkitBS.V, ARkitBS.blendshapes[bs_i] + ARkitBS.V, ARkit_lm_groups)
             # generate the indices of the landmarks we care about
@@ -338,12 +245,19 @@ def get_frozen_mask():
                             if barycentric_coord_matrix[lm_i, v_i] > 0.0:
                                 non_involved_lm_indices.append(v_i)
 
-            non_frozen_set, frozen_set = compute_vertex_assignments(flameBS.V, flameBS.F,
+            non_frozen_set, frozen_set = compute_weighted_vertex_assignments(flameBS.V, flameBS.F,
                 key_point_set_A=involved_lm_indices,
                 key_point_set_B=non_involved_lm_indices,
-                K=K)
+                max_distance=neighborhood_distance)
             non_frozen_set = list(non_frozen_set)
             frozen_set = list(frozen_set)
+            plt.scatter(flameBS.V[non_frozen_set, 0], flameBS.V[non_frozen_set, 1], c='blue', s=4, label='Non-Frozen')
+            plt.scatter(flameBS.V[frozen_set, 0], flameBS.V[frozen_set, 1], c='red', s=1, label='Frozen')
+            plt.legend()
+
+
+
+
             frozen_set_mat = torch.zeros(flameBS.V.shape, dtype=torch.double, device=device)
             frozen_set_mat[frozen_set, :] = 1.0  # set the frozen set to 1.0
             frozen_LM_mask.append(frozen_set_mat)
@@ -486,9 +400,6 @@ def evaluate_locality_FLAME_BASED(model_path):
     AR_kit_LM = ARkit_full_bary_weights @ V_bs_ARkit
     lm_loss = torch.norm(flame_LM - AR_kit_LM, p=2, dim=-1).mean()
 
-
-
-
 def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
     global ROOT
     
@@ -583,9 +494,11 @@ def evaluate_span_FLAME_BASED(model_path, batch_size=32, sample_count=200):
 
 
 ROOT = "/scratch/ondemand29/evanpan/facial-manifold-learning"
+ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration"
 DATA_ROOT = os.path.join(ROOT, "data")
-LOCALITY_MASK_ROOT = os.path.join(DATA_ROOT, "flame_model", "FLAME_masks")
+LOCALITY_MASK_ROOT = os.path.join(DATA_ROOT, "flame_model", "Locality_masks")
 
+neighborhood_distance=0.02 # 2 cm neighborhood distance for freezing
 K=5 # for flame, we use K=5 for landmark-based-freezing.
 WEIGHT_LEARN_RATE = 0.01
 FACS_WEIGHT_ITERATIONS = 1000
@@ -595,4 +508,4 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # evaluate_span_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002", 
 #                           64, 200)
 
-evaluate_locality_FLAME_BASED("/scratch/ondemand29/evanpan/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002")
+evaluate_locality_FLAME_BASED("/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_correctly_frozen_K=5")

@@ -6,7 +6,7 @@ from blendshapes import FLAMEBlendshapes, BasicBlendshapes
 import torch
 import polyscope as ps
 import polyscope.imgui as psim
-from scripts.experiment_different_kinds_of_partial_freezing.naive_autosegmentation import compute_vertex_assignments
+from scripts.experiment_different_kinds_of_partial_freezing.naive_autosegmentation import compute_vertex_assignments, compute_weighted_vertex_assignments
 import pickle
 
 def get_lm_indices_and_bary_weights_from_FLAME():
@@ -212,7 +212,7 @@ class BatchedManualAdam:
                 param.add_(m_hat / (torch.sqrt(v_hat) + self.eps), alpha=-self.lr)
 
 def get_frozen_mask():
-    global LOCALITY_MASK_ROOT, K
+    global LOCALITY_MASK_ROOT, neighborhood_distance
     
     frozen_LM_mask_path = os.path.join(LOCALITY_MASK_ROOT, f"frozen_LM_mask_ring_K={K}.pt")
     if os.path.exists(frozen_LM_mask_path):
@@ -229,6 +229,7 @@ def get_frozen_mask():
         all_lm_groups = list(flame_lm_groups.keys())
         frozen_LM_mask = []
         for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
+            # bs_i = 0
             print(f"Processing blendshape {bs_i} of {ARkitBS.blendshapes.shape[0]}")
             involved_lm_groups = compute_landmark_groups_of_blendshape(ARkitBS.V, ARkitBS.blendshapes[bs_i] + ARkitBS.V, ARkit_lm_groups)
             # generate the indices of the landmarks we care about
@@ -250,12 +251,16 @@ def get_frozen_mask():
                             if barycentric_coord_matrix[lm_i, v_i] > 0.0:
                                 non_involved_lm_indices.append(v_i)
 
-            non_frozen_set, frozen_set = compute_vertex_assignments(flameBS.V, flameBS.F,
+            non_frozen_set, frozen_set = compute_weighted_vertex_assignments(flameBS.V, flameBS.F,
                 key_point_set_A=involved_lm_indices,
                 key_point_set_B=non_involved_lm_indices,
-                K=K)
+                max_distance=neighborhood_distance)
             non_frozen_set = list(non_frozen_set)
             frozen_set = list(frozen_set)
+
+
+
+
             frozen_set_mat = torch.zeros(flameBS.V.shape, dtype=torch.double, device=device)
             frozen_set_mat[frozen_set, :] = 1.0  # set the frozen set to 1.0
             frozen_LM_mask.append(frozen_set_mat)
@@ -271,6 +276,7 @@ LEARNING_RATE = 0.03
 ITERATIONS = 5000
 K=5
 CLIPS_OF_DATA = 1
+neighborhood_distance = 0.02  # 2 cm neighborhood distance for freezing
 
 # em parameters
 EM_LEARNING_RATE = 0.00003

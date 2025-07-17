@@ -316,7 +316,7 @@ def solve_flame_params_direct(flame_model, V_target):
 def load_flame_blendshape_model():
     controller_range = [0, 1]
     n_blendshapes = 51
-    surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_W_frozen_0p002/EM_optimized_FACS_directions_geometry_based/"
+    surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_correctly_frozen_K=5/"
     # surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test/"
     flame = FLAMEBlendshapes()
 
