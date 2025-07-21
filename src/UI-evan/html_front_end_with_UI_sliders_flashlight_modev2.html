@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blendshape Controller with 3D Sliders</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: #1a1a1a;
+            color: white;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .controls {
+            width: 300px;
+            background: #2a2a2a;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #444;
+        }
+        
+        .viewport {
+            flex: 1;
+            position: relative;
+        }
+        
+        .slider-group {
+            margin-bottom: 25px;
+        }
+        
+        .slider-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #ddd;
+        }
+
+        .dynamic-controls {
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #333;
+            border-radius: 8px;
+            border: 2px solid #FF9800;
+        }
+
+        .dynamic-controls h3 {
+            margin-top: 0;
+            color: #FF9800;
+            font-size: 14px;
+        }
+
+        .performance-controls {
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #333;
+            border-radius: 8px;
+            border: 2px solid #2196F3;
+        }
+
+        .performance-controls h3 {
+            margin-top: 0;
+            color: #2196F3;
+            font-size: 14px;
+        }
+
+        .fps-options {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .fps-button {
+            padding: 8px 16px;
+            background: #555;
+            border: 2px solid #777;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .fps-button:hover {
+            background: #666;
+            border-color: #2196F3;
+        }
+
+        .fps-button.active {
+            background: #2196F3;
+            border-color: #2196F3;
+            color: white;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .slider {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: #444;
+            outline: none;
+            appearance: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .slider-value {
+            width: 60px;
+            text-align: center;
+            font-family: monospace;
+            color: #4CAF50;
+        }
+        
+        .connection-status {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+        
+        .connected {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .disconnected {
+            background: #f44336;
+            color: white;
+        }
+        
+        .stats {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            z-index: 1000;
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 4px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 1000;
+            max-width: 250px;
+        }
+        
+        .flashlight-controls {
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #333;
+            border-radius: 8px;
+            border: 2px solid #4CAF50;
+        }
+        
+        
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 24px;
+            background: #666;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .toggle-switch.active {
+            background: #4CAF50;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+        
+        .toggle-switch.active .toggle-slider {
+            transform: translateX(26px);
+        }
+        
+        .toggle-label {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        
+        h2 {
+            margin-top: 0;
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        
+        h3 {
+            margin-top: 0;
+            color: #4CAF50;
+            font-size: 14px;
+        }
+
+        .stat-highlight {
+            color: #2196F3;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <h2>Blendshape Controls</h2>
+            
+            <div class="performance-controls">
+                <h3>Performance Settings</h3>
+                <div class="slider-group">
+                    <label class="slider-label">Update Rate (FPS)</label>
+                    <div class="fps-options">
+                        <button class="fps-button" data-fps="5">5 FPS</button>
+                        <button class="fps-button active" data-fps="10">10 FPS</button>
+                        <button class="fps-button" data-fps="20">20 FPS</button>
+                        <button class="fps-button" data-fps="30">30 FPS</button>
+                        <button class="fps-button" data-fps="60">60 FPS</button>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; font-size: 12px; color: #aaa;">
+                    Lower FPS = Better performance<br>
+                    Higher FPS = Smoother interaction
+                </div>
+            </div>
+            
+            <div class="flashlight-controls">
+                <h3>Flashlight Mode</h3>
+                <div class="toggle-container">
+                    <span class="toggle-label">Flashlight Mode:</span>
+                    <div class="toggle-switch" id="flashlight-toggle">
+                        <div class="toggle-slider"></div>
+                    </div>
+                </div>
+                
+                <div class="slider-group">
+                    <label class="slider-label">Flash Radius</label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="flash-radius" min="0.01" max="0.2" step="0.001" value="0.05">
+                        <div class="slider-value" id="flash-radius-value">0.05</div>
+                    </div>
+                </div>
+            </div>
+            <div class="dynamic-controls">
+                <h3>Dynamic Controls</h3>
+                <div class="toggle-container">
+                    <span class="toggle-label">Dynamic Slider Position:</span>
+                    <div class="toggle-switch" id="dynamic-position-toggle">
+                        <div class="toggle-slider"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="sliders-container">
+                <!-- Sliders will be generated here -->
+            </div>
+        </div>
+        
+        <div class="viewport">
+            <div id="connection-status" class="connection-status disconnected">Disconnected</div>
+            <div class="stats">
+                <div>Vertices: <span id="vertex-count">0</span></div>
+                <div>Faces: <span id="face-count">0</span></div>
+                <div>FPS: <span id="fps">0</span></div>
+                <div>Updates/sec: <span id="updates-per-sec">0</span></div>
+                <div>Target FPS: <span id="target-fps" class="stat-highlight">10</span></div>
+                <div>3D Sliders: <span id="slider-count">0</span></div>
+                <div>Visible Sliders: <span id="visible-slider-count">0</span></div>
+            </div>
+            <div class="instructions">
+                <strong>Controls:</strong><br>
+                • Mouse: Rotate camera<br>
+                • Wheel: Zoom<br>
+                • Hold 'A' + Click: Drag 3D sliders<br>
+                • Red spheres are interactive sliders<br>
+                • <strong>Flashlight Mode:</strong> Hold 'A' to reveal sliders near mouse
+            </div>
+            <canvas id="viewport-canvas"></canvas>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        class BlendshapeController {
+            constructor() {
+                this.websocket = null;
+                this.scene = null;
+                this.renderer = null;
+                this.camera = null;
+                this.mesh = null;
+                this.geometry = null;
+                
+                this.weights = {};
+                this.modelIndex = 0;
+                this.blendshapes = []; // Will be populated from server
+                
+                // 3D Sliders
+                this.sliderObjects = []; // Array of slider objects in 3D space
+                this.sliderGroup = null; // Group containing all slider objects
+                this.isDraggingSlider = false;
+                this.selectedSlider = null;
+                this.raycaster = new THREE.Raycaster();
+                this.mouse = new THREE.Vector2();
+                
+                // Flashlight mode
+                this.flashlightMode = false;
+                this.flashRadius = 0.05;
+                
+                // Input state
+                this.keys = {
+                    a: false
+                };
+                
+                // Performance tracking
+                this.lastTime = 0;
+                this.frameCount = 0;
+                this.updateCount = 0;
+                this.lastUpdateTime = 0;
+
+                // Dynamic slider positioning
+                this.dynamicPositioning = false;
+                this.lastConfigRequestTime = 0;
+                
+                // FPS limiting
+                this.targetFPS = 10;
+                this.updateInterval = null;
+                this.configUpdateInterval = null;
+                
+                // Track if weights have changed
+                this.weightsChanged = false;
+                
+                this.init();
+            }
+            
+            async init() {
+                this.setupThreeJS();
+                this.setupInputHandlers();
+                this.setupFlashlightControls();
+                this.setupDynamicControls();
+                this.setupPerformanceControls();
+                await this.connectWebSocket();
+                this.animate();
+            }
+            
+            setupPerformanceControls() {
+                const fpsButtons = document.querySelectorAll('.fps-button');
+                
+                fpsButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        // Remove active class from all buttons
+                        fpsButtons.forEach(btn => btn.classList.remove('active'));
+                        
+                        // Add active class to clicked button
+                        button.classList.add('active');
+                        
+                        // Update target FPS
+                        const fps = parseInt(button.getAttribute('data-fps'));
+                        this.setTargetFPS(fps);
+                    });
+                });
+            }
+            
+            setTargetFPS(fps) {
+                this.targetFPS = fps;
+                document.getElementById('target-fps').textContent = fps;
+                
+                // Clear existing intervals
+                if (this.updateInterval) {
+                    clearInterval(this.updateInterval);
+                }
+                if (this.configUpdateInterval) {
+                    clearInterval(this.configUpdateInterval);
+                }
+                
+                // Restart update loops with new FPS
+                this.startUpdateLoop();
+                
+                console.log(`Target FPS set to: ${fps}`);
+            }
+            
+            setupFlashlightControls() {
+                // Flashlight toggle
+                const flashlightToggle = document.getElementById('flashlight-toggle');
+                flashlightToggle.addEventListener('click', () => {
+                    this.flashlightMode = !this.flashlightMode;
+                    flashlightToggle.classList.toggle('active', this.flashlightMode);
+                    this.updateSliderVisibility();
+                });
+                
+                // Flash radius slider
+                const flashRadiusSlider = document.getElementById('flash-radius');
+                const flashRadiusValue = document.getElementById('flash-radius-value');
+                
+                flashRadiusSlider.addEventListener('input', (e) => {
+                    this.flashRadius = parseFloat(e.target.value);
+                    flashRadiusValue.textContent = this.flashRadius.toFixed(3);
+                    this.updateSliderVisibility();
+                });
+            }
+
+            setupDynamicControls() {
+                // Dynamic positioning toggle
+                const dynamicPositionToggle = document.getElementById('dynamic-position-toggle');
+                dynamicPositionToggle.addEventListener('click', () => {
+                    this.dynamicPositioning = !this.dynamicPositioning;
+                    dynamicPositionToggle.classList.toggle('active', this.dynamicPositioning);
+                    
+                    if (this.dynamicPositioning) {
+                        console.log('Dynamic slider positioning enabled');
+                    } else {
+                        console.log('Dynamic slider positioning disabled - switching to neutral positions');
+                        // Request neutral config when switching off dynamic mode
+                        this.requestBlendshapeConfig();
+                    }
+                });
+            }
+
+                        
+            setupThreeJS() {
+                const canvas = document.getElementById('viewport-canvas');
+                
+                // Scene setup
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x222222);
+                
+                // Camera setup
+                this.camera = new THREE.PerspectiveCamera(25, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.z = 1;
+                
+                // Renderer setup
+                this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+                this.renderer.setSize(window.innerWidth - 300, window.innerHeight);
+                
+                // Lighting
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(1, 1, 1);
+                this.scene.add(directionalLight);
+                
+                // Create slider group - will be attached to mesh later
+                this.sliderGroup = new THREE.Group();
+                
+                // Handle window resize
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+            
+            setupInputHandlers() {
+                // Keyboard handlers
+                document.addEventListener('keydown', (e) => {
+                    if (e.key.toLowerCase() === 'a') {
+                        this.keys.a = true;
+                        this.updateSliderVisibility();
+                    }
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    if (e.key.toLowerCase() === 'a') {
+                        this.keys.a = false;
+                        this.isDraggingSlider = false;
+                        this.selectedSlider = null;
+                        this.updateSliderVisibility();
+                    }
+                });
+                
+                // Mouse handlers
+                let isMouseDown = false;
+                let mouseX = 0, mouseY = 0;
+                
+                this.renderer.domElement.addEventListener('mousedown', (e) => {
+                    isMouseDown = true;
+                    mouseX = e.clientX;
+                    mouseY = e.clientY;
+                    
+                    // Update mouse coordinates for raycasting
+                    const rect = this.renderer.domElement.getBoundingClientRect();
+                    this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                    this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                    
+                    if (this.keys.a) {
+                        // Check for slider intersection
+                        this.handleSliderMouseDown();
+                    }
+                });
+                
+                this.renderer.domElement.addEventListener('mousemove', (e) => {
+                    // Update mouse coordinates for raycasting (always needed for flashlight)
+                    const rect = this.renderer.domElement.getBoundingClientRect();
+                    this.mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                    this.mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                    
+                    // Update slider visibility in flashlight mode
+                    if (this.flashlightMode) {
+                        this.updateSliderVisibility();
+                    }
+                    
+                    if (!isMouseDown) return;
+                    
+                    const deltaX = e.clientX - mouseX;
+                    const deltaY = e.clientY - mouseY;
+                    
+                    if (this.keys.a && this.isDraggingSlider) {
+                        // Handle slider dragging
+                        this.handleSliderDrag();
+                    } else if (!this.keys.a && this.mesh) {
+                        // Handle camera rotation
+                        this.mesh.rotation.y += deltaX * 0.01;
+                        this.mesh.rotation.x += deltaY * 0.01;
+                    }
+                    
+                    mouseX = e.clientX;
+                    mouseY = e.clientY;
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    isMouseDown = false;
+                    this.isDraggingSlider = false;
+                    this.selectedSlider = null;
+                });
+                
+                // Zoom with mouse wheel
+                this.renderer.domElement.addEventListener('wheel', (e) => {
+                    this.camera.position.z += e.deltaY * 0.01;
+                    this.camera.position.z = Math.max(0.5, Math.min(10, this.camera.position.z));
+                });
+            }
+            
+            updateSliderVisibility() {
+                if (!this.sliderObjects.length) return;
+                
+                let visibleCount = 0;
+                
+                this.sliderObjects.forEach(slider => {
+                    let shouldBeVisible = false;
+                    
+                    if (!this.flashlightMode) {
+                        // Normal mode: show all sliders always
+                        shouldBeVisible = true;
+                    } else {
+                        // Flashlight mode: only show sliders when 'A' is pressed and within cone
+                        if (this.keys.a) {
+                            shouldBeVisible = this.isSliderInFlashlightCone(slider);
+                        }
+                        // If 'A' is not pressed, shouldBeVisible remains false
+                    }
+                    
+                    // Update visibility for all slider components
+                    slider.sphere.visible = shouldBeVisible;
+                    slider.line.visible = shouldBeVisible;
+                    slider.minMarker.visible = shouldBeVisible;
+                    slider.defaultMarker.visible = shouldBeVisible;
+                    slider.maxMarker.visible = shouldBeVisible;
+                    
+                    if (shouldBeVisible) visibleCount++;
+                });
+                
+                // Update stats
+                document.getElementById('visible-slider-count').textContent = visibleCount;
+            }
+            
+            isSliderInFlashlightCone(slider) {
+                // Cast ray from camera through mouse position
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                
+                // Get slider position in world coordinates
+                const sliderWorldPos = slider.sphere.position.clone();
+                if (this.mesh) {
+                    sliderWorldPos.applyMatrix4(this.mesh.matrixWorld);
+                }
+                
+                // Calculate distance from ray to slider position
+                const rayOrigin = this.raycaster.ray.origin;
+                const rayDirection = this.raycaster.ray.direction;
+                
+                // Vector from ray origin to slider
+                const toSlider = sliderWorldPos.clone().sub(rayOrigin);
+                
+                // Project toSlider onto ray direction to get the closest point on ray
+                const projectionLength = toSlider.dot(rayDirection);
+                
+                // If projection is behind the ray origin, use ray origin as closest point
+                const closestPointOnRay = projectionLength > 0 
+                    ? rayOrigin.clone().add(rayDirection.clone().multiplyScalar(projectionLength))
+                    : rayOrigin.clone();
+                
+                // Calculate distance from slider to closest point on ray
+                const distanceToRay = sliderWorldPos.distanceTo(closestPointOnRay);
+                
+                // Check if within flash radius cone
+                // For a simple implementation, we'll use a cylindrical "flashlight"
+                // You could make this more sophisticated by considering the angle from camera
+                return distanceToRay <= this.flashRadius;
+            }
+            
+            handleSliderMouseDown() {
+                // Cast ray from camera through mouse position
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                
+                // Only check visible sliders
+                const visibleSliderSpheres = this.sliderObjects
+                    .filter(slider => slider.sphere.visible)
+                    .map(slider => slider.sphere);
+                
+                const intersects = this.raycaster.intersectObjects(visibleSliderSpheres);
+                
+                if (intersects.length > 0) {
+                    // Find which slider was clicked
+                    const clickedSphere = intersects[0].object;
+                    this.selectedSlider = this.sliderObjects.find(slider => slider.sphere === clickedSphere);
+                    this.isDraggingSlider = true;
+                    
+                    console.log(`Selected slider: ${this.selectedSlider.name}`);
+                }
+            }
+            
+            handleSliderDrag() {
+                if (!this.selectedSlider) return;
+                
+                // Cast ray from camera through mouse position
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                
+                // Get the slider line in world coordinates (accounting for mesh rotation)
+                const worldMinPos = this.selectedSlider.minPos.clone();
+                const worldMaxPos = this.selectedSlider.maxPos.clone();
+                const worldDefaultPos = this.selectedSlider.defaultPos.clone();
+                
+                // Transform positions by mesh matrix if mesh exists
+                if (this.mesh) {
+                    worldMinPos.applyMatrix4(this.mesh.matrixWorld);
+                    worldMaxPos.applyMatrix4(this.mesh.matrixWorld);
+                    worldDefaultPos.applyMatrix4(this.mesh.matrixWorld);
+                }
+                
+                // Create a plane perpendicular to camera direction passing through slider line center
+                const cameraDirection = new THREE.Vector3();
+                this.camera.getWorldDirection(cameraDirection);
+                
+                const sliderCenter = worldDefaultPos;
+                const plane = new THREE.Plane(cameraDirection, -cameraDirection.dot(sliderCenter));
+                
+                // Find intersection point with the plane
+                const intersectionPoint = new THREE.Vector3();
+                if (this.raycaster.ray.intersectPlane(plane, intersectionPoint)) {
+                    // Project intersection point onto slider line
+                    const sliderDirection = worldMaxPos.clone().sub(worldMinPos).normalize();
+                    const toIntersection = intersectionPoint.clone().sub(worldMinPos);
+                    const projectionLength = toIntersection.dot(sliderDirection);
+                    
+                    // Clamp to slider bounds
+                    const sliderLength = worldMaxPos.distanceTo(worldMinPos);
+                    const clampedLength = Math.max(0, Math.min(sliderLength, projectionLength));
+                    
+                    // Calculate new position in world space
+                    const newWorldPosition = worldMinPos.clone().add(
+                        sliderDirection.multiplyScalar(clampedLength)
+                    );
+                    
+                    // Convert back to local space for the slider sphere
+                    const newLocalPosition = newWorldPosition.clone();
+                    if (this.mesh) {
+                        const inverseMatrix = this.mesh.matrixWorld.clone().invert();
+                        newLocalPosition.applyMatrix4(inverseMatrix);
+                    }
+                    
+                    this.selectedSlider.sphere.position.copy(newLocalPosition);
+                    
+                    // Calculate weight based on position along the line
+                    const t = clampedLength / sliderLength;
+                    const blendshape = this.blendshapes.find(bs => bs.name === this.selectedSlider.name);
+                    if (blendshape) {
+                        let weight;
+                        if (t <= 0.5) {
+                            // Between min and default
+                            weight = blendshape.min + (blendshape.default - blendshape.min) * (t * 2);
+                        } else {
+                            // Between default and max
+                            weight = blendshape.default + (blendshape.max - blendshape.default) * ((t - 0.5) * 2);
+                        }
+                        
+                        // Update weight and UI slider
+                        this.weights[this.selectedSlider.name] = weight;
+                        this.weightsChanged = true; // Mark weights as changed
+                        this.updateUISlider(this.selectedSlider.name, weight);
+                    }
+                }
+            }
+            
+            updateUISlider(name, value) {
+                // Find and update the corresponding UI slider
+                const sliders = document.querySelectorAll('.slider');
+                const valueDisplays = document.querySelectorAll('.slider-value');
+                
+                for (let i = 0; i < sliders.length; i++) {
+                    if (sliders[i].getAttribute('data-name') === name) {
+                        sliders[i].value = value;
+                        valueDisplays[i].textContent = value.toFixed(2);
+                        break;
+                    }
+                }
+            }
+            
+            createSliders() {
+                const container = document.getElementById('sliders-container');
+                
+                // Clear existing sliders
+                container.innerHTML = '';
+                
+                // Check if blendshapes are loaded
+                if (!this.blendshapes || this.blendshapes.length === 0) {
+                    container.innerHTML = '<div style="color: #666; font-style: italic;">Loading blendshape configuration...</div>';
+                    return;
+                }
+                
+                this.blendshapes.forEach(blendshape => {
+                    const sliderGroup = document.createElement('div');
+                    sliderGroup.className = 'slider-group';
+                    
+                    const label = document.createElement('label');
+                    label.className = 'slider-label';
+                    label.textContent = blendshape.name.replace('_', ' ').toUpperCase();
+                    
+                    const sliderContainer = document.createElement('div');
+                    sliderContainer.className = 'slider-container';
+                    
+                    const slider = document.createElement('input');
+                    slider.type = 'range';
+                    slider.className = 'slider';
+                    slider.min = blendshape.min;
+                    slider.max = blendshape.max;
+                    slider.step = 0.0001;
+                    slider.value = blendshape.default;
+                    slider.setAttribute('data-name', blendshape.name); // Add data attribute for identification
+                    
+                    const valueDisplay = document.createElement('div');
+                    valueDisplay.className = 'slider-value';
+                    valueDisplay.textContent = blendshape.default.toFixed(2);
+                    
+                    // Event listener
+                    slider.addEventListener('input', (e) => {
+                        const value = parseFloat(e.target.value);
+                        this.weights[blendshape.name] = value;
+                        this.weightsChanged = true; // Mark weights as changed
+                        valueDisplay.textContent = value.toFixed(2);
+                        
+                        // Update 3D slider position
+                        this.update3DSliderFromWeight(blendshape.name, value);
+                    });
+                    
+                    sliderContainer.appendChild(slider);
+                    sliderContainer.appendChild(valueDisplay);
+                    sliderGroup.appendChild(label);
+                    sliderGroup.appendChild(sliderContainer);
+                    container.appendChild(sliderGroup);
+                });
+            }
+            
+            update3DSliderFromWeight(name, weight) {
+                // Find the 3D slider and update its position based on weight
+                const slider3D = this.sliderObjects.find(slider => slider.name === name);
+                if (!slider3D) return;
+                
+                const blendshape = this.blendshapes.find(bs => bs.name === name);
+                if (!blendshape) return;
+                
+                // Calculate position along slider line
+                let t;
+                if (weight <= blendshape.default) {
+                    // Between min and default
+                    t = (weight - blendshape.min) / (blendshape.default - blendshape.min) * 0.5;
+                } else {
+                    // Between default and max
+                    t = 0.5 + (weight - blendshape.default) / (blendshape.max - blendshape.default) * 0.5;
+                }
+                
+                // Clamp t to valid range
+                t = Math.max(0, Math.min(1, t));
+                
+                // Update 3D slider position
+                const direction = slider3D.maxPos.clone().sub(slider3D.minPos);
+                const newPosition = slider3D.minPos.clone().add(direction.multiplyScalar(t));
+                slider3D.sphere.position.copy(newPosition);
+            }
+            
+            create3DSliders() {
+                // Clear existing 3D sliders
+                this.sliderGroup.clear();
+                this.sliderObjects = [];
+                
+                if (!this.blendshapes || this.blendshapes.length === 0) return;
+                
+                this.blendshapes.forEach(blendshape => {
+                    if (!blendshape.position_of_min || !blendshape.position_of_default || !blendshape.position_of_max) {
+                        console.warn(`Missing 3D positions for blendshape: ${blendshape.name}`);
+                        return;
+                    }
+                    
+                    // Create positions as THREE.Vector3
+                    const minPos = new THREE.Vector3(...blendshape.position_of_min);
+                    const defaultPos = new THREE.Vector3(...blendshape.position_of_default);
+                    const maxPos = new THREE.Vector3(...blendshape.position_of_max);
+                    
+                    // Create slider line geometry
+                    const lineGeometry = new THREE.BufferGeometry().setFromPoints([minPos, maxPos]);
+                    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x666666, linewidth: 5 });
+                    const line = new THREE.Line(lineGeometry, lineMaterial);
+                    
+                    // Create slider sphere (draggable element)
+                    const sphereGeometry = new THREE.SphereGeometry(0.003, 8, 8);
+                    const sphereMaterial = new THREE.MeshLambertMaterial({ color: 0xff4444 });
+                    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                    sphere.position.copy(defaultPos);
+                    
+                    // Create marker spheres for min, default, max positions
+                    const markerGeometry = new THREE.SphereGeometry(0.0005, 8, 8);
+                    
+                    const minMarker = new THREE.Mesh(markerGeometry, new THREE.MeshLambertMaterial({ color: 0x4444ff }));
+                    minMarker.position.copy(minPos);
+                    
+                    const defaultMarker = new THREE.Mesh(markerGeometry, new THREE.MeshLambertMaterial({ color: 0x44ff44 }));
+                    defaultMarker.position.copy(defaultPos);
+                    
+                    const maxMarker = new THREE.Mesh(markerGeometry, new THREE.MeshLambertMaterial({ color: 0x4444ff }));
+                    maxMarker.position.copy(maxPos);
+                    
+                    // Add to slider group
+                    this.sliderGroup.add(line);
+                    this.sliderGroup.add(sphere);
+                    this.sliderGroup.add(minMarker);
+                    this.sliderGroup.add(defaultMarker);
+                    this.sliderGroup.add(maxMarker);
+                    
+                    // Store slider object for interaction
+                    this.sliderObjects.push({
+                        name: blendshape.name,
+                        sphere: sphere,
+                        line: line,
+                        minPos: minPos,
+                        defaultPos: defaultPos,
+                        maxPos: maxPos,
+                        minMarker: minMarker,
+                        defaultMarker: defaultMarker,
+                        maxMarker: maxMarker
+                    });
+                });
+                
+                // Update stats
+                document.getElementById('slider-count').textContent = this.sliderObjects.length;
+                
+                // Set initial visibility
+                this.updateSliderVisibility();
+                
+                console.log(`Created ${this.sliderObjects.length} 3D sliders`);
+            }
+            
+            async connectWebSocket() {
+                try {
+                    this.websocket = new WebSocket('ws://localhost:8765');
+                    
+                    this.websocket.onopen = () => {
+                        console.log('Connected to blendshape server');
+                        this.updateConnectionStatus(true);
+                        this.requestBlendshapeConfig();
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        this.handleMessage(event);
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        console.log('Disconnected from server');
+                        this.updateConnectionStatus(false);
+                    };
+                    
+                    this.websocket.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateConnectionStatus(false);
+                    };
+                    
+                } catch (error) {
+                    console.error('Failed to connect:', error);
+                    this.updateConnectionStatus(false);
+                }
+            }
+            
+            requestBlendshapeConfig() {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    const message = {
+                        type: 'get_blendshape_config',
+                        index_i: this.modelIndex,
+                        use_dynamic_slider_position_mode: this.dynamicPositioning
+                    };
+                    this.websocket.send(JSON.stringify(message));
+                }
+            }
+            
+            requestFaceData() {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    const message = {
+                        type: 'get_faces',
+                        index_i: this.modelIndex
+                    };
+                    this.websocket.send(JSON.stringify(message));
+                }
+            }
+                
+            handleMessage(event) {
+                if (typeof event.data === 'string') {
+                    // JSON message (configuration or face data)
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'blendshape_config') {
+                            this.setupBlendshapes(data.blendshapes);
+                        } else if (data.type === 'faces_data') {
+                            this.setupGeometry(data.faces);
+                        }
+                    } catch (error) {
+                        console.error('Error parsing JSON:', error);
+                    }
+                } else {
+                    // Binary message (vertex data)
+                    this.updateVertices(event.data);
+                }
+            }
+            
+            // step 1
+            setupBlendshapes(blendshapeConfig) {
+                console.log('Received blendshape configuration:', blendshapeConfig);
+                
+                const isInitialSetup = this.blendshapes.length === 0;
+                this.blendshapes = blendshapeConfig;
+                
+                if (isInitialSetup) {
+                    // Initialize weights with default values only on first setup
+                    this.weights = {};
+                    this.blendshapes.forEach(bs => {
+                        this.weights[bs.name] = bs.default;
+                    });
+                    
+                    // Create UI sliders only once
+                    this.createSliders();
+                    
+                    // Request face data after initial blendshapes are configured
+                    this.requestFaceData();
+                    
+                    // Start the update loop
+                    this.startUpdateLoop();
+                }
+                
+                // Always update 3D slider positions (for both initial and dynamic updates)
+                this.update3DSlidersPositions();
+            }
+
+            
+            setupGeometry(faces) {
+                // Create initial geometry with placeholder vertices
+                const vertexCount = Math.max(...faces.flat()) + 1;
+                const vertices = new Float32Array(vertexCount * 3);
+                
+                // Fill with placeholder positions
+                for (let i = 0; i < vertexCount; i++) {
+                    vertices[i * 3] = (Math.random() - 0.5) * 2;
+                    vertices[i * 3 + 1] = (Math.random() - 0.5) * 2;
+                    vertices[i * 3 + 2] = (Math.random() - 0.5) * 2;
+                }
+                
+                this.geometry = new THREE.BufferGeometry();
+                this.geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                
+                // Set up faces
+                const indices = new Uint32Array(faces.flat());
+                this.geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+                
+                this.geometry.computeVertexNormals();
+                
+                // Create mesh
+                const material = new THREE.MeshLambertMaterial({ 
+                    color: 0xFFFFFF,
+                    wireframe: false,
+                    side: THREE.DoubleSide
+                });
+                
+                if (this.mesh) {
+                    this.scene.remove(this.mesh);
+                }
+                
+                this.mesh = new THREE.Mesh(this.geometry, material);
+                this.scene.add(this.mesh);
+                
+                // Attach slider group to mesh so it rotates with the mesh
+                if (this.sliderGroup && this.sliderObjects.length > 0) {
+                    this.mesh.add(this.sliderGroup);
+                    console.log('Attached slider group to mesh');
+                }
+                
+                // Update stats
+                document.getElementById('vertex-count').textContent = vertexCount;
+                document.getElementById('face-count').textContent = faces.length;
+                
+                // Attach slider group to mesh if sliders exist
+                if (this.sliderGroup && this.sliderObjects.length > 0) {
+                    this.mesh.add(this.sliderGroup);
+                    console.log('Attached slider group to mesh after geometry setup');
+                }
+                
+                console.log(`Geometry setup: ${vertexCount} vertices, ${faces.length} faces`);
+            }
+            
+            updateVertices(binaryData) {
+                if (!this.geometry) return;
+                
+                try {
+                    console.log('Received data type:', typeof binaryData);
+                    console.log('Data constructor:', binaryData.constructor.name);
+                    
+                    // Convert to ArrayBuffer if needed
+                    let arrayBuffer;
+                    if (binaryData instanceof ArrayBuffer) {
+                        arrayBuffer = binaryData;
+                    } else if (binaryData instanceof Blob) {
+                        // If it's a Blob, we need to convert it asynchronously
+                        binaryData.arrayBuffer().then(buffer => {
+                            this.updateVertices(buffer);
+                        });
+                        return;
+                    } else if (binaryData.buffer && binaryData.buffer instanceof ArrayBuffer) {
+                        // If it's a typed array, get its buffer
+                        arrayBuffer = binaryData.buffer.slice(binaryData.byteOffset, binaryData.byteOffset + binaryData.byteLength);
+                    } else {
+                        console.error('Unsupported binary data type:', binaryData);
+                        return;
+                    }
+                    
+                    // Parse binary data
+                    const view = new DataView(arrayBuffer);
+                    const numVertices = view.getUint32(0, false); // false = big-endian (matches server '>I')
+                    
+                    console.log(`Received binary data: ${arrayBuffer.byteLength} bytes, ${numVertices} vertices expected`);
+                    
+                    // Calculate expected data size
+                    const expectedDataSize = 4 + (numVertices * 3 * 4); // header + vertices * 3 coords * 4 bytes per float
+                    if (arrayBuffer.byteLength !== expectedDataSize) {
+                        console.error(`Data size mismatch: expected ${expectedDataSize}, got ${arrayBuffer.byteLength}`);
+                        return;
+                    }
+                    
+                    // Extract vertex data (skip 4-byte header)
+                    const vertexData = new Float32Array(arrayBuffer, 4, numVertices * 3);
+                    
+                    // Get current geometry vertex count
+                    const positionAttribute = this.geometry.getAttribute('position');
+                    const currentVertexCount = positionAttribute.array.length / 3;
+                    
+                    // Check if vertex counts match
+                    if (numVertices !== currentVertexCount) {
+                        console.warn(`Vertex count mismatch: geometry has ${currentVertexCount}, received ${numVertices}`);
+                        
+                        // Recreate geometry with correct size if needed
+                        console.log('Recreating geometry with correct vertex count...');
+                        const newVertices = new Float32Array(numVertices * 3);
+                        newVertices.set(vertexData);
+                        
+                        this.geometry.setAttribute('position', new THREE.BufferAttribute(newVertices, 3));
+                        this.geometry.computeVertexNormals();
+                        
+                        // Update stats
+                        document.getElementById('vertex-count').textContent = numVertices;
+                        return;
+                    }
+                    
+                    // Update existing geometry
+                    positionAttribute.array.set(vertexData);
+                    positionAttribute.needsUpdate = true;
+                    
+                    this.geometry.computeVertexNormals();
+                    
+                    // Update performance counter
+                    this.updateCount++;
+                    
+                } catch (error) {
+                    console.error('Error updating vertices:', error);
+                    console.error('Data type:', typeof binaryData);
+                    if (binaryData && binaryData.byteLength !== undefined) {
+                        console.error('Data size:', binaryData.byteLength);
+                    }
+                }
+            }
+
+            update3DSlidersPositions() {
+                if (!this.blendshapes || this.blendshapes.length === 0) return;
+                
+                // If no sliders exist yet, create them
+                if (this.sliderObjects.length === 0) {
+                    this.create3DSliders();
+                    return;
+                }
+                
+                // Update existing slider positions
+                this.sliderObjects.forEach((slider, index) => {
+                    const blendshape = this.blendshapes.find(bs => bs.name === slider.name);
+                    if (!blendshape || !blendshape.position_of_min || !blendshape.position_of_default || !blendshape.position_of_max) {
+                        return;
+                    }
+                    
+                    // Update positions
+                    const minPos = new THREE.Vector3(...blendshape.position_of_min);
+                    const defaultPos = new THREE.Vector3(...blendshape.position_of_default);
+                    const maxPos = new THREE.Vector3(...blendshape.position_of_max);
+                    
+                    // Update stored positions
+                    slider.minPos.copy(minPos);
+                    slider.defaultPos.copy(defaultPos);
+                    slider.maxPos.copy(maxPos);
+                    
+                    // Update line geometry
+                    const lineGeometry = new THREE.BufferGeometry().setFromPoints([minPos, maxPos]);
+                    slider.line.geometry.dispose(); // Clean up old geometry
+                    slider.line.geometry = lineGeometry;
+                    
+                    // Update marker positions
+                    slider.minMarker.position.copy(minPos);
+                    slider.defaultMarker.position.copy(defaultPos);
+                    slider.maxMarker.position.copy(maxPos);
+                    
+                    // Update sphere position based on current weight
+                    const currentWeight = this.weights[slider.name] || 0;
+                    this.update3DSliderFromWeight(slider.name, currentWeight);
+                });
+                
+                // Update visibility after position changes
+                this.updateSliderVisibility();
+            }
+            
+            sendWeights() {
+                // Only send if weights have changed
+                if (!this.weightsChanged) return;
+                
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    const message = {
+                        type: 'update_weights',
+                        weights: this.weights,
+                        index_i: this.modelIndex
+                    };
+                    this.websocket.send(JSON.stringify(message));
+                    this.weightsChanged = false; // Reset flag after sending
+                }
+            }
+            
+            startUpdateLoop() {
+                const intervalMs = 1000 / this.targetFPS;
+                
+                // Weight update interval
+                this.updateInterval = setInterval(() => {
+                    this.sendWeights();
+                }, intervalMs);
+                
+                // Dynamic config update interval (only when dynamic positioning is on)
+                this.configUpdateInterval = setInterval(() => {
+                    if (this.dynamicPositioning && this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                        this.requestBlendshapeConfig();
+                    }
+                }, intervalMs);
+                
+                // Update performance stats every second
+                setInterval(() => {
+                    const now = Date.now();
+                    const updatesPerSec = this.updateCount;
+                    this.updateCount = 0;
+                    
+                    document.getElementById('updates-per-sec').textContent = updatesPerSec;
+                }, 1000);
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                // FPS calculation
+                const now = Date.now();
+                this.frameCount++;
+                
+                if (now - this.lastTime >= 1000) {
+                    const fps = Math.round((this.frameCount * 1000) / (now - this.lastTime));
+                    document.getElementById('fps').textContent = fps;
+                    this.frameCount = 0;
+                    this.lastTime = now;
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+            
+            updateConnectionStatus(connected) {
+                const status = document.getElementById('connection-status');
+                status.textContent = connected ? 'Connected' : 'Disconnected';
+                status.className = `connection-status ${connected ? 'connected' : 'disconnected'}`;
+            }
+            
+            onWindowResize() {
+                this.camera.aspect = (window.innerWidth - 300) / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth - 300, window.innerHeight);
+            }
+        }
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            new BlendshapeController();
+        });
+    </script>
+</body>
+</html>

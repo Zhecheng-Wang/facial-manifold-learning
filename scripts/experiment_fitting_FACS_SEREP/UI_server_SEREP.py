@@ -9,21 +9,20 @@ import pickle
 import numpy as np
 import torch 
 import sys
-sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/src")
-sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration")
-sys.path.append("/code/facial-manifold-learning/src")
 sys.path.append("/code/facial-manifold-learning")
-
+sys.path.append("/code/facial-manifold-learning/src")
+sys.path.append("/code/expressive-speech2face/")
 from blendshapes import FLAMEBlendshapes, BasicBlendshapes
 from utils import load_ARKit_blendshape
-import polyscope as ps
-import polyscope.imgui as psim
-from scripts.polyscope_playback import MeshAnimator, MultiMeshAnimator
-from flame_utils import *
 import copy
 from sklearn.decomposition import PCA
 import os   
 from scipy.interpolate import interp1d
+from omegaconf import OmegaConf
+from speech2face.mesh.utils import loadObj
+from speech2face.models.spiral.get_model import get_model
+from speech2face.scripts.id_exp_convert_tests import replace_on_cfg
+from web_visualizer_server import *
 
 class BlendshapeServer:
     def __init__(self, host="localhost", port=8765):
@@ -180,17 +179,20 @@ def get_vertices(weights: Dict, index_i: int) -> np.ndarray:
     Returns:
         np.ndarray: Nx3 array of vertex positions
     """
-    global model, surrogate_model, flame_space_path_interp
+    global model, surrogate_model, SEREP_space_path_interp, std, mean, neutral
     # PLACEHOLDER - Replace with your actual blendshape computation
     # This example creates a simple deformed mesh based on weights
     # Example: Create a simple mesh (replace with your actual data)
     weights_array = np.array([weights[name] for name in surrogate_model.names])
-    
-    deformed_vertices = model.eval(run_controller(flame_space_path_interp, weights_array))
+    latent = run_controller(SEREP_space_path_interp, weights_array)
+    latent = torch.from_numpy(latent).to(neutral.device).unsqueeze(0)
+    deformed_vertices = model.id_encoder(neutral, latent)  # [1, 13473, 3]
+    deformed_vertices = deformed_vertices * std + mean  # Apply normalization
+    deformed_vertices = deformed_vertices.detach().cpu().numpy()[0]  # Convert
     return deformed_vertices
 
 def get_face():
-    global model
+    global surrogate_model
     """
     Return face information of the mesh (triangles/indices)
     Called once per model to get topology
@@ -201,10 +203,10 @@ def get_face():
     # PLACEHOLDER - Replace with your actual face data
     # Example: Return triangle indices for a simple mesh
     
-    return model.F
+    return surrogate_model.F
 
 def get_blendshape_config(index_i: int, use_dynamic_slider_position_mode: bool = False):
-    global blendshape_config, surrogate_model, model, flame_space_path_interp
+    global blendshape_config, surrogate_model, model, SEREP_space_path_interp
     """
     Return blendshape configuration for the specified model
     
@@ -239,7 +241,7 @@ def get_blendshape_config(index_i: int, use_dynamic_slider_position_mode: bool =
     deformation = np.linalg.norm(blendshapes, axis=2)
     K = 10
     top_k_indices = np.argsort(-deformation, axis=1)[:, :K]
-    off_set = surrogate_model.facing_dir * 0.01
+    off_set = np.array([0, 0, 1]) * 0.04
     
     for i, name in enumerate(surrogate_model.names):
         vertex_of_interest_i = top_k_indices[i, 0]
@@ -249,16 +251,15 @@ def get_blendshape_config(index_i: int, use_dynamic_slider_position_mode: bool =
     
     return config
 
-def run_controller(flame_space_path_interp, weights) -> np.ndarray:
-    global flame_zero
+def run_controller(SEREP_space_path_interp, weights) -> np.ndarray:
     """Runs the VAE/MLP controller once and returns a flat numpy vector."""
     # optimizing the flame parameters to match the surrogate model
     # exp_params_iter, jaw_params_iter = optimize_flame_weights(flame_torch, shape_params, pose_params, v_out_surrogate[0].to(flame_torch.device), steps=200)
-    flame_zero_weights = flame_zero.copy()
+    SEREP_zero_weights = np.zeros([64], dtype=np.float32)
     for i in range(len(weights)):
-        flame_weights_i = flame_space_path_interp[i](weights[i])
-        flame_zero_weights += flame_weights_i
-    return flame_zero_weights[0]  
+        SEREP_weights_i = SEREP_space_path_interp[i](weights[i])
+        SEREP_zero_weights += SEREP_weights_i
+    return SEREP_zero_weights
 
 def solve_flame_params_direct(flame_model, V_target):
     """
@@ -316,46 +317,87 @@ def solve_flame_params_direct(flame_model, V_target):
     
     return exp_params, jaw_params
 
-def load_flame_blendshape_model():
+def load_SEREP_blendshape_model():
+    class DummyArgs:
+        def __init__(self, input, output):
+            self.config = "/code/models/id_exp_apply_model/config.yaml"
+            self.checkpoint = "/code/models/id_exp_apply_model/checkpoint_epoch41.pth"
+            self.neutral = "/code/models/S077_HSP_M_20/Head/S077_HSP_M_20_Head.obj"
+            self.output = output
+            self.input = input        
+            self.scale = 0.01
+            self.shift = (0, 169.44, 5.2)
+
+    SEREP_zero = np.zeros([1, 64])
+    # load the SEREP model
+    faces_path = "/mnt/e/Projects/Ubi_Speech2face/models/flame_retopo/faces.pickle" 
+    FLAME_TINGS_ROOT = "/code/models/flame2ubi"
+    FLAME_IN_UBI_fname = "generic_model_ubito_flame_v2.pkl"
+    flame_lmk_path =  "landmark_embedding.npy"
+    FLAME_IN_UBI_fname = os.path.join(FLAME_TINGS_ROOT, FLAME_IN_UBI_fname)
+    flame_lmk_path = os.path.join(FLAME_TINGS_ROOT, flame_lmk_path)
+    flame_in_ubi_path = FLAME_IN_UBI_fname
+    args = DummyArgs(input=None, output=None)
+
+    config = OmegaConf.load(args.config)
+    replace_on_cfg(config)
+    config.model.data_root = r"/expnet_root"
+    device = torch.device('cuda')
+
+    # load model
+    model = get_model(config.model, device)
+    checkpoint = torch.load(args.checkpoint)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    model.to(device)
+    
+    # load neutral mesh
+    batch_size = 1
+    neutral = loadObj(args.neutral)['verts']
+    neutral = (neutral - np.array(args.shift)) * args.scale
+    neutral = neutral.astype(np.float32)
+    neutral = torch.from_numpy(neutral).to(device)
+    mean, std = checkpoint['meanstd']
+    neutral = (neutral - mean) / std
+    SEREP_neutral = neutral.tile(batch_size, 1, 1) * std + mean
+    SEREP_neutral_np = SEREP_neutral.detach().cpu().numpy()[0]
+    SEREP_F = loadObj(args.neutral)["tris"]
+    
     controller_range = [0, 1]
     n_blendshapes = 51
-    surrogate_model_root_path = "/code/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_frozen_LM_w_frozen_0p002/EM_optimized_FACS_directions/"
-    # surrogate_model_root_path = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/full_face_bs_test/"
-    flame = FLAMEBlendshapes()
-
-    weights = []
-    for i in range(0, n_blendshapes):
-        exp_path = os.path.join(surrogate_model_root_path, f"exp_params_{i}.npy")
-        jaw_path = os.path.join(surrogate_model_root_path, f"jaw_params_{i}.npy")
-        exp_params = np.load(exp_path)
-        jaw_params = np.load(jaw_path)
-        if exp_params.ndim == 1:
-            exp_params = exp_params.reshape(1, -1)
-        if jaw_params.ndim == 1:
-            jaw_params = jaw_params.reshape(1, -1)
-        weights.append(np.concatenate([exp_params, jaw_params], axis=1))
-    
-    flame_space_path_interp = []
+    # load the solved latent directions
+    surrogate_model_root_path = "/code/facial-manifold-learning/experiments/SEREP_fACS_latents"
+    SEREP_latent_directions = os.path.join(surrogate_model_root_path, "alternative_freeze_latent_for_all_FACS_AUs.npy")
+    SEREP_latent_directions = np.load(SEREP_latent_directions)
+    SEREP_latent_directions.dtype = np.float32
+    SEREP_space_path_interp = []    
     for i in range(n_blendshapes):
-        flame_space_path = [np.zeros([103]), weights[i][0]]
-        flame_space_path_interp.append(
-            interp1d(np.array(controller_range), np.array(flame_space_path), axis=0, fill_value="extrapolate", bounds_error=False)
+        SEREP_space_path = [np.zeros([64]), SEREP_latent_directions[i]]
+        SEREP_space_path_interp.append(
+            interp1d(np.array(controller_range), SEREP_space_path, axis=0, fill_value="extrapolate", bounds_error=False)
         )
-    flame_zero = np.zeros([1, 103])
+    
+    
 
     surrogate_Vs = []
     for i in range(n_blendshapes):
-        flame_weights_i = flame_space_path_interp[i](1.0)
-        surrogate_Vs.append(flame.eval(flame_weights_i) - flame.eval(flame_zero[0]))
+        # i=0
+        SEREP_latent_i = SEREP_space_path_interp[i](1.0)
+        SEREP_latent_i = torch.from_numpy(SEREP_latent_i).to(device).unsqueeze(0).float()
+        bs_mesh_i = model.id_encoder(neutral, SEREP_latent_i) # [1, 13473, 3]
+        bs_mesh_i = bs_mesh_i * std + mean
+        surrogate_Vs.append(bs_mesh_i.detach().cpu().numpy()[0] - SEREP_neutral_np)
+
+    
+    
     surrogate_model = BasicBlendshapes(
         names=[f"blendshape_{i}" for i in range(n_blendshapes)],
-        V=flame.V,
+        V=SEREP_neutral_np,
         blenshapes=np.array(surrogate_Vs),
-        F=flame.F,
+        F=SEREP_F,
     )
-
-
-    return flame_space_path_interp, flame, surrogate_model, flame_zero
+    
+    return SEREP_space_path_interp, model, surrogate_model, SEREP_latent_directions, [std, mean], neutral
 
 async def main():
     server = BlendshapeServer()
@@ -365,11 +407,14 @@ async def main():
     print("Server started, waiting for clients...")
     await asyncio.Future()  # Keep the server running indefinitely
 
+
+
+
 # Server startup
 if __name__ == "__main__":
-    
+
     # load the model 
-    flame_space_path_interp, model, surrogate_model, flame_zero = load_flame_blendshape_model()
+    SEREP_space_path_interp, model, surrogate_model, SEREP_latent_directions, [std, mean], neutral = load_SEREP_blendshape_model()
 
     # get the configuration for the blendshapes
     blendshape_config = []
@@ -385,7 +430,9 @@ if __name__ == "__main__":
     # compute the UI positions of the sliders
     # compute compute position of the slideras
     zero_weights = np.zeros(len(surrogate_model.names), dtype=float)
-    V=model.eval(run_controller(flame_space_path_interp, zero_weights))
+    latent = torch.from_numpy(run_controller(SEREP_space_path_interp, zero_weights)).to(neutral.device).unsqueeze(0)
+    V = model.id_encoder(neutral, latent)  # [1, 13473, 3]
     # Run the event loop
     asyncio.run(main())
+    surrogate_model.F.shape
     loop = asyncio.get_event_loop()

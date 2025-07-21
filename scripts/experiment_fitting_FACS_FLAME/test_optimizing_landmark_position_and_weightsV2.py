@@ -154,7 +154,63 @@ def compute_landmark_groups_of_blendshape(V_0, V_bs, landmark_groups):
         if diff_mag >= 1E-4:
             involved_lm_groups.append(key)
     return involved_lm_groups
+    
+class BatchedManualAdam:
+    """Manual Adam implementation that handles batched parameters with independent momentum states."""
+    
+    def __init__(self, batch_size, param_shapes, lr=0.001, betas=(0.9, 0.999), eps=1e-8, device='cuda', dtype=torch.float32):
+        """
+        Initialize BatchedManualAdam with configurable precision.
         
+        Args:
+            batch_size: Number of batches
+            param_shapes: List of parameter shapes
+            lr: Learning rate
+            betas: Adam beta parameters
+            eps: Epsilon for numerical stability
+            device: Device to use
+            dtype: torch.dtype, either torch.float32 or torch.float64 (double)
+        """
+        self.batch_size = batch_size
+        self.param_shapes = param_shapes  # List of shapes, e.g. [(100,), (3,)]
+        self.lr = lr
+        self.betas = betas
+        self.eps = eps
+        self.device = device
+        self.dtype = dtype
+        self.t = 0
+        
+        # Initialize moment estimates for each frame independently
+        self.m = []
+        self.v = []
+        
+        for shape in param_shapes:
+            # Create momentum tensors for all frames in batch
+            m_shape = (batch_size,) + shape
+            self.m.append(torch.zeros(m_shape, device=device, dtype=dtype))
+            self.v.append(torch.zeros(m_shape, device=device, dtype=dtype))
+    
+    def step(self, params, grads):
+        """
+        params: list of tensors with shape [batch_size, ...]
+        grads: list of tensors with shape [batch_size, ...]
+        """
+        self.t += 1
+        
+        with torch.no_grad():
+            for i, (param, grad) in enumerate(zip(params, grads)):
+                # Update biased first moment estimate
+                self.m[i].mul_(self.betas[0]).add_(grad, alpha=1 - self.betas[0])
+                # Update biased second raw moment estimate
+                self.v[i].mul_(self.betas[1]).addcmul_(grad, grad, value=1 - self.betas[1])
+                
+                # Compute bias-corrected moment estimates
+                m_hat = self.m[i] / (1 - self.betas[0]**self.t)
+                v_hat = self.v[i] / (1 - self.betas[1]**self.t)
+                
+                # Update parameters
+                param.add_(m_hat / (torch.sqrt(v_hat) + self.eps), alpha=-self.lr)
+
 
  
 # compute_landmark_groups_of_blendshape(ARkitBS.V, ARkitBS.blendshapes[0], ARkit_lm_groups)
@@ -162,7 +218,9 @@ def compute_landmark_groups_of_blendshape(V_0, V_bs, landmark_groups):
 LEARNING_RATE = 0.03
 ITERATIONS = 5000
 W_FROZEN = 0.0005
-neighborhood_distance=0.02
+K=5
+LOCALITY_MASK_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration/data/flame_model/Locality_masks"
+neighborhood_distance = 0.02
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 flameBS = FLAMEBlendshapes(device=device)
@@ -199,10 +257,10 @@ for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
                     if barycentric_coord_matrix[lm_i, v_i] > 0.0:
                         non_involved_lm_indices.append(v_i)
 
-    non_frozen_set, frozen_set = (flameBS.V, flameBS.F,
+    non_frozen_set, frozen_set = compute_weighted_vertex_assignments(flameBS.V, flameBS.F,
         key_point_set_A=involved_lm_indices,
         key_point_set_B=non_involved_lm_indices,
-        max_distance=neighborhood_distance)
+        neighborhood_distance=neighborhood_distance)
     non_frozen_set = list(non_frozen_set)
     frozen_set = list(frozen_set)
     
@@ -259,7 +317,7 @@ for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
 
 flame_param_dires = [[x[0].detach().cpu().numpy(), x[1].detach().cpu().numpy()] for x in flame_param_dires]
 # save these
-save_root = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_weighted_geodesic_frozen_ND=0p02, "
+save_root = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_correctly_frozen_K=5, "
 if not os.path.exists(save_root):
     os.makedirs(save_root)
 for i in range(len(flame_param_dires)):

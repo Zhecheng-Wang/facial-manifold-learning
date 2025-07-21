@@ -1,6 +1,8 @@
 import numpy as np
 import os, sys
 sys.path.append("/Users/evanpan/Documents/GitHub/ManifoldExploration/src")
+sys.path.append("/code/facial-manifold-learning/src")
+
 from utils import load_ARKit_blendshape
 from blendshapes import FLAMEBlendshapes, BasicBlendshapes
 import torch
@@ -27,17 +29,18 @@ def get_lm_indices_and_bary_weights_from_FLAME():
         
         "lip": list(range(48, 68)),      # 48-67: outer lip contour
     }
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     lms_we_care_about = []
     for key in FLAME_facial_landmark_groups.keys():
          # these are the row indices after we use barycentric coordinates to map to the landmarks
         lms_we_care_about.extend(FLAME_facial_landmark_groups[key])
     lms_we_care_about = np.array(lms_we_care_about, dtype=np.int64)
-    flameBS = FLAMEBlendshapes()
+    flameBS = FLAMEBlendshapes(device=device)
     # barcycentric weights, lms_we_care_about_can 
     flame_bary_weights = flameBS.flame.full_lmk_bary_coords[0, lms_we_care_about]
     flame_mesh_face_indices = flameBS.flame.full_lmk_faces_idx[0, lms_we_care_about]
 
-    full_bary_weights = torch.zeros((flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32)
+    full_bary_weights = torch.zeros((flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32, device=device)
     for i in range(0, flame_mesh_face_indices.shape[0]):
         triangles = flameBS.F[flame_mesh_face_indices[i]]
         full_bary_weights[i, triangles] = flame_bary_weights[i]
@@ -48,7 +51,7 @@ def get_lm_indices_and_bary_weights_from_FLAME():
         grouped_flame_bary_weights = flameBS.flame.full_lmk_bary_coords[0, FLAME_facial_landmark_groups[key]]
         grouped_mesh_face_indices = flameBS.flame.full_lmk_faces_idx[0, FLAME_facial_landmark_groups[key]] # get the indices of the face
 
-        grouped_bary_weights = torch.zeros((grouped_flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32)
+        grouped_bary_weights = torch.zeros((grouped_flame_bary_weights.shape[0], flameBS.V.shape[0],), dtype=torch.float32, device=device)
         for i in range(0, grouped_mesh_face_indices.shape[0]):
             triangles = flameBS.F[grouped_mesh_face_indices[i]]
             grouped_bary_weights[i, triangles] = grouped_flame_bary_weights[i]
@@ -154,21 +157,21 @@ def compute_landmark_groups_of_blendshape(V_0, V_bs, landmark_groups):
         if diff_mag >= 1E-4:
             involved_lm_groups.append(key)
     return involved_lm_groups
-    
+        
+
  
 # compute_landmark_groups_of_blendshape(ARkitBS.V, ARkitBS.blendshapes[0], ARkit_lm_groups)
 
 LEARNING_RATE = 0.03
 ITERATIONS = 5000
 W_FROZEN = 0.0005
-K=5
-LOCALITY_MASK_ROOT = "/Users/evanpan/Documents/GitHub/ManifoldExploration/data/flame_model/Locality_masks"
-neighborhood_distance = 0.02
+neighborhood_distance=0.02
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 flameBS = FLAMEBlendshapes(device=device)
 flame_lm_indices, flame_full_bary_weights, flame_lm_groups = get_lm_indices_and_bary_weights_from_FLAME()
-flame_LM = flame_full_bary_weights @ flameBS.V
+flameBS_V = torch.from_numpy(flameBS.V).to(device)
+flame_LM = flame_full_bary_weights @ flameBS_V
 # display_a_single_mesh(flameBS.V, flameBS.F, flame_LM.detach().numpy())
 
 ARkitBS = load_ARKit_blendshape()
@@ -185,25 +188,27 @@ for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
     involved_lm_indices = []
     for key in involved_lm_groups:
         barycentric_coord_matrix = flame_lm_groups[key]
-        for lm_i in range(barycentric_coord_matrix.shape[0]):
-            for v_i in range(barycentric_coord_matrix.shape[1]):
-                if barycentric_coord_matrix[lm_i, v_i] > 0.0:
-                    involved_lm_indices.append(v_i)
-
+        # Find all indices where values > 0
+        nonzero_indices = torch.nonzero(barycentric_coord_matrix > 0.0, as_tuple=False)
+        # Extract the v_i indices (column indices)
+        v_indices = nonzero_indices[:, 1].tolist()
+        involved_lm_indices.extend(v_indices)
+        
     # these are the ones we want frozen
     non_involved_lm_indices = []
     for key in all_lm_groups:
         if key not in involved_lm_groups:
             barycentric_coord_matrix = flame_lm_groups[key]
-            for lm_i in range(barycentric_coord_matrix.shape[0]):
-                for v_i in range(barycentric_coord_matrix.shape[1]):
-                    if barycentric_coord_matrix[lm_i, v_i] > 0.0:
-                        non_involved_lm_indices.append(v_i)
+            # Find all indices where values > 0
+            nonzero_indices = torch.nonzero(barycentric_coord_matrix > 0.0, as_tuple=False)
+            # Extract the v_i indices (column indices)
+            v_indices = nonzero_indices[:, 1].tolist()
+            non_involved_lm_indices.extend(v_indices)
 
     non_frozen_set, frozen_set = compute_weighted_vertex_assignments(flameBS.V, flameBS.F,
         key_point_set_A=involved_lm_indices,
         key_point_set_B=non_involved_lm_indices,
-        neighborhood_distance=neighborhood_distance)
+        max_distance=neighborhood_distance)
     non_frozen_set = list(non_frozen_set)
     frozen_set = list(frozen_set)
     
@@ -260,7 +265,9 @@ for bs_i in range(0, ARkitBS.blendshapes.shape[0]):
 
 flame_param_dires = [[x[0].detach().cpu().numpy(), x[1].detach().cpu().numpy()] for x in flame_param_dires]
 # save these
-save_root = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_correctly_frozen_K=5, "
+save_root = "/Users/evanpan/Documents/GitHub/ManifoldExploration/experiments/FACS_Based_flame_sliders_with_L1_weighted_geodesic_frozen_ND=0p02, "
+save_root = "/code/facial-manifold-learning/experiments/FACS_Based_flame_sliders_with_L1_weighted_geodesic_frozen_ND=0p02"
+
 if not os.path.exists(save_root):
     os.makedirs(save_root)
 for i in range(len(flame_param_dires)):
@@ -269,7 +276,7 @@ for i in range(len(flame_param_dires)):
     np.save(os.path.join(save_root, f"exp_params_{i}.npy"), exp_params)
     np.save(os.path.join(save_root, f"jaw_params_{i}.npy"), jaw_params)
 
-visualize = True
+visualize = False
 if visualize:
     flame_mesh_bs = []
     flame_F = []

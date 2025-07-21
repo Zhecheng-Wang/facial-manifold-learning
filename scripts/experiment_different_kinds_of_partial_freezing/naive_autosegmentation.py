@@ -213,7 +213,6 @@ def compute_heat_diffusion_assignment(vertices, faces, seed_A, seed_B, time_step
     return set_A, set_B
     
 
-
 def visualize_assignments(vertices: np.ndarray,
                          faces: np.ndarray,
                          set_A: Set[int],

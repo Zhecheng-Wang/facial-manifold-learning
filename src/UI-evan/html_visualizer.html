@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mesh Visualizer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        .sidebar {
+            width: 320px;
+            background: rgba(26, 26, 46, 0.95);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 2px 0 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .viewport {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            background: linear-gradient(45deg, #00d4ff, #ff6b6b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .connection-status {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 12px;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .connected {
+            background: rgba(76, 175, 80, 0.8);
+            color: white;
+        }
+        
+        .disconnected {
+            background: rgba(244, 67, 54, 0.8);
+            color: white;
+        }
+        
+        .stats {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            z-index: 1000;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            z-index: 1000;
+            max-width: 280px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .section h3 {
+            margin: 0 0 15px 0;
+            color: #00d4ff;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .object-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .object-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(2px);
+        }
+        
+        .object-info {
+            flex: 1;
+        }
+        
+        .object-name {
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 2px;
+        }
+        
+        .object-details {
+            color: #aaa;
+            font-size: 10px;
+        }
+        
+        .object-controls {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .btn {
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 10px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-toggle {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .btn-toggle.hidden {
+            background: #666;
+        }
+        
+        .btn-remove {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .global-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .btn-global {
+            flex: 1;
+            padding: 10px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-global:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .empty-state {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 20px;
+        }
+        
+        .mesh-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00d4ff;
+            margin-right: 8px;
+        }
+        
+        .pointcloud-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff6b6b;
+            margin-right: 8px;
+        }
+        
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="header">
+                <h1>Mesh Visualizer</h1>
+            </div>
+            
+            <div class="section">
+                <h3>📊 Scene Statistics</h3>
+                <div style="color: #aaa; font-size: 12px;">
+                    <div>Meshes: <span id="mesh-count">0</span></div>
+                    <div>Point Clouds: <span id="pointcloud-count">0</span></div>
+                    <div>Total Objects: <span id="total-objects">0</span></div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h3>🔍 Meshes</h3>
+                <div id="meshes-list" class="empty-state">No meshes loaded</div>
+            </div>
+            
+            <div class="section">
+                <h3>⚪ Point Clouds</h3>
+                <div id="pointclouds-list" class="empty-state">No point clouds loaded</div>
+            </div>
+            
+            <div class="section">
+                <h3>🎮 Global Controls</h3>
+                <div class="global-controls">
+                    <button class="btn-global" onclick="clearAll()">Clear All</button>
+                    <button class="btn-global" onclick="resetCamera()">Reset View</button>
+                </div>
+                <div class="global-controls">
+                    <button class="btn-global" onclick="toggleHelpers()" id="helpers-btn">Hide Grid/Axes</button>
+                    <button class="btn-global" onclick="toggleCameraMode()" id="camera-btn">Orthographic</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="viewport">
+            <div id="connection-status" class="connection-status disconnected">Disconnected</div>
+            <div class="stats">
+                <div>FPS: <span id="fps">0</span></div>
+                <div>Objects: <span id="objects-count">0</span></div>
+                <div>Triangles: <span id="triangles-count">0</span></div>
+                <div>Points: <span id="points-count">0</span></div>
+            </div>
+            <div class="controls">
+                <strong>🎯 Controls:</strong><br>
+                • <strong>Left Mouse:</strong> Rotate camera<br>
+                • <strong>Right Mouse:</strong> Pan camera<br>
+                • <strong>Scroll:</strong> Zoom in/out<br>
+                • <strong>Double Click:</strong> Focus on center<br>
+                • <strong>Sidebar:</strong> Toggle object visibility
+            </div>
+            <canvas id="viewport-canvas"></canvas>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        class MeshVisualizerClient {
+            constructor() {
+                this.websocket = null;
+                this.scene = null;
+                this.renderer = null;
+                this.camera = null;
+                this.controls = null;
+                
+                // Scene objects
+                this.meshObjects = new Map();
+                this.pointCloudObjects = new Map();
+                
+                // Performance tracking
+                this.lastTime = Date.now();
+                this.frameCount = 0;
+                
+                // Stats
+                this.stats = {
+                    objects: 0,
+                    triangles: 0,
+                    points: 0
+                };
+                
+                this.init();
+            }
+            
+            async init() {
+                this.setupThreeJS();
+                this.setupControls();
+                await this.connectWebSocket();
+                this.animate();
+            }
+            
+            setupThreeJS() {
+                const canvas = document.getElementById('viewport-canvas');
+                
+                // Scene setup
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x1a1a2e);
+                
+                // Camera setup
+                this.camera = new THREE.PerspectiveCamera(
+                    75, 
+                    (window.innerWidth - 320) / window.innerHeight, 
+                    0.1, 
+                    1000
+                );
+                this.camera.position.set(5, 5, 5);
+                this.camera.lookAt(0, 0, 0);
+                
+                // Store camera parameters for orthographic mode
+                this.cameraParams = {
+                    isPerspective: true,
+                    fov: 75,
+                    near: 0.1,
+                    far: 1000
+                };
+                
+                // Renderer setup
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas, 
+                    antialias: true,
+                    alpha: true
+                });
+                this.renderer.setSize(window.innerWidth - 320, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                
+                // Lighting setup - brighter lighting
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.8); // Increased from 0.4 to 0.8
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); // Increased from 0.8 to 1.2
+                directionalLight.position.set(10, 10, 5);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                this.scene.add(directionalLight);
+                
+                const pointLight = new THREE.PointLight(0x00d4ff, 0.6); // Increased from 0.3 to 0.6
+                pointLight.position.set(-10, 10, -10);
+                this.scene.add(pointLight);
+                
+                // Add another directional light from opposite side for better illumination
+                const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
+                directionalLight2.position.set(-10, -10, -5);
+                this.scene.add(directionalLight2);
+                
+                // Add grid helper (can be toggled)
+                this.gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x222222);
+                this.scene.add(this.gridHelper);
+                
+                // Add axes helper (can be toggled)
+                this.axesHelper = new THREE.AxesHelper(2);
+                this.scene.add(this.axesHelper);
+                
+                // Grid/axes visibility state
+                this.helpersVisible = true;
+                
+                // Handle window resize
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+            
+            setupControls() {
+                // Basic mouse controls
+                let isMouseDown = false;
+                let mouseButton = 0;
+                let lastMouseX = 0;
+                let lastMouseY = 0;
+                
+                this.renderer.domElement.addEventListener('mousedown', (e) => {
+                    isMouseDown = true;
+                    mouseButton = e.button;
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                });
+                
+                this.renderer.domElement.addEventListener('mousemove', (e) => {
+                    if (!isMouseDown) return;
+                    
+                    const deltaX = e.clientX - lastMouseX;
+                    const deltaY = e.clientY - lastMouseY;
+                    
+                    if (mouseButton === 0) {
+                        // Left button - rotate (fixed vertical direction)
+                        const spherical = new THREE.Spherical();
+                        spherical.setFromVector3(this.camera.position);
+                        spherical.theta -= deltaX * 0.01;
+                        spherical.phi -= deltaY * 0.01;  // Fixed: reversed the sign
+                        spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+                        this.camera.position.setFromSpherical(spherical);
+                        this.camera.lookAt(0, 0, 0);
+                    } else if (mouseButton === 2) {
+                        // Right button - pan
+                        const distance = this.camera.position.length();
+                        const factor = distance * 0.001;
+                        this.camera.position.x -= deltaX * factor;
+                        this.camera.position.y += deltaY * factor;
+                    }
+                    
+                    lastMouseX = e.clientX;
+                    lastMouseY = e.clientY;
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    isMouseDown = false;
+                });
+                
+                // Zoom with mouse wheel
+                this.renderer.domElement.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    
+                    if (this.cameraParams.isPerspective) {
+                        // Perspective camera - move camera closer/further (no limits)
+                        const factor = e.deltaY > 0 ? 1.1 : 0.9;
+                        this.camera.position.multiplyScalar(factor);
+                        // Removed zoom limits - can zoom as close or far as needed
+                    } else {
+                        // Orthographic camera - adjust zoom (no limits)
+                        const factor = e.deltaY > 0 ? 1.1 : 0.9;
+                        this.camera.zoom /= factor;
+                        // Removed zoom limits - can zoom as much as needed
+                        this.camera.updateProjectionMatrix();
+                    }
+                });
+                
+                // Double click to reset view
+                this.renderer.domElement.addEventListener('dblclick', () => {
+                    this.resetCamera();
+                });
+                
+                // Prevent context menu
+                this.renderer.domElement.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                });
+            }
+            
+            async connectWebSocket() {
+                try {
+                    this.websocket = new WebSocket('ws://localhost:8766');
+                    
+                    this.websocket.onopen = () => {
+                        console.log('Connected to mesh visualizer server');
+                        this.updateConnectionStatus(true);
+                    };
+                    
+                    this.websocket.onmessage = (event) => {
+                        this.handleMessage(event);
+                    };
+                    
+                    this.websocket.onclose = () => {
+                        console.log('Disconnected from server');
+                        this.updateConnectionStatus(false);
+                        // Try to reconnect after 3 seconds
+                        setTimeout(() => this.connectWebSocket(), 3000);
+                    };
+                    
+                    this.websocket.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateConnectionStatus(false);
+                    };
+                    
+                } catch (error) {
+                    console.error('Failed to connect:', error);
+                    this.updateConnectionStatus(false);
+                    setTimeout(() => this.connectWebSocket(), 3000);
+                }
+            }
+            
+            handleMessage(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    switch (data.type) {
+                        case 'mesh_update':
+                            this.handleMeshUpdate(data.object_id, data.data);
+                            break;
+                        case 'point_cloud_update':
+                            this.handlePointCloudUpdate(data.object_id, data.data);
+                            break;
+                        case 'object_removal':
+                            this.handleObjectRemoval(data.object_id);
+                            break;
+                        case 'visibility_update':
+                            this.handleVisibilityUpdate(data.object_id, data.visible);
+                            break;
+                        case 'clear_all':
+                            this.handleClearAll();
+                            break;
+                        case 'scene_info':
+                            this.handleSceneInfo(data.data);
+                            break;
+                        default:
+                            console.warn('Unknown message type:', data.type);
+                    }
+                } catch (error) {
+                    console.error('Error parsing message:', error);
+                }
+            }
+            
+            handleMeshUpdate(objectId, data) {
+                // Remove existing mesh if it exists
+                if (this.meshObjects.has(objectId)) {
+                    this.scene.remove(this.meshObjects.get(objectId));
+                }
+                
+                // Create geometry
+                const geometry = new THREE.BufferGeometry();
+                const vertices = new Float32Array(data.vertices.flat());
+                const indices = new Uint32Array(data.faces.flat());
+                
+                geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+                geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+                geometry.computeVertexNormals();
+                
+                // Create material
+                let material;
+                if (data.colors) {
+                    const colors = new Float32Array(data.colors.flat());
+                    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                    material = new THREE.MeshLambertMaterial({
+                        vertexColors: true,
+                        wireframe: data.wireframe || false,
+                        transparent: data.opacity < 1.0,
+                        opacity: data.opacity || 1.0,
+                        side: THREE.DoubleSide
+                    });
+                } else {
+                    material = new THREE.MeshLambertMaterial({
+                        color: 0xffffff, // Changed from random color to white
+                        wireframe: data.wireframe || false,
+                        transparent: data.opacity < 1.0,
+                        opacity: data.opacity || 1.0,
+                        side: THREE.DoubleSide
+                    });
+                }
+                
+                // Create mesh
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.visible = data.visible !== false;
+                mesh.userData = { type: 'mesh', id: objectId };
+                
+                this.meshObjects.set(objectId, mesh);
+                this.scene.add(mesh);
+                
+                this.updateUI();
+                console.log(`Updated mesh: ${objectId}`);
+            }
+            
+            handlePointCloudUpdate(objectId, data) {
+                // Remove existing point cloud if it exists
+                if (this.pointCloudObjects.has(objectId)) {
+                    this.scene.remove(this.pointCloudObjects.get(objectId));
+                }
+                
+                // Create a group to hold all sphere instances
+                const pointGroup = new THREE.Group();
+                
+                // Default radius if not specified
+                const defaultRadius = data.radius || 0.01;
+                
+                // Create sphere geometry (we'll reuse this for all points)
+                const sphereGeometry = new THREE.SphereGeometry(defaultRadius, 8, 6); // Low poly for performance
+                
+                // Create points as individual spheres
+                for (let i = 0; i < data.points.length; i++) {
+                    const point = data.points[i];
+                    
+                    // Create material for this sphere
+                    let material;
+                    if (data.colors && data.colors[i]) {
+                        material = new THREE.MeshLambertMaterial({
+                            color: new THREE.Color(data.colors[i][0], data.colors[i][1], data.colors[i][2])
+                        });
+                    } else {
+                        material = new THREE.MeshLambertMaterial({
+                            color: 0xffffff
+                        });
+                    }
+                    
+                    // Create sphere mesh
+                    let sphereMesh;
+                    if (data.sizes && data.sizes[i]) {
+                        // Custom size for this point
+                        const customRadius = data.sizes[i];
+                        const customGeometry = new THREE.SphereGeometry(customRadius, 8, 6);
+                        sphereMesh = new THREE.Mesh(customGeometry, material);
+                    } else {
+                        // Use default size
+                        sphereMesh = new THREE.Mesh(sphereGeometry, material);
+                    }
+                    
+                    // Position the sphere
+                    sphereMesh.position.set(point[0], point[1], point[2]);
+                    
+                    // Add to group
+                    pointGroup.add(sphereMesh);
+                }
+                
+                pointGroup.visible = data.visible !== false;
+                pointGroup.userData = { type: 'pointcloud', id: objectId };
+                
+                this.pointCloudObjects.set(objectId, pointGroup);
+                this.scene.add(pointGroup);
+                
+                this.updateUI();
+                console.log(`Updated point cloud: ${objectId} with ${data.points.length} spheres`);
+            }
+            
+            handleObjectRemoval(objectId) {
+                // Remove mesh
+                if (this.meshObjects.has(objectId)) {
+                    this.scene.remove(this.meshObjects.get(objectId));
+                    this.meshObjects.delete(objectId);
+                }
+                
+                // Remove point cloud
+                if (this.pointCloudObjects.has(objectId)) {
+                    this.scene.remove(this.pointCloudObjects.get(objectId));
+                    this.pointCloudObjects.delete(objectId);
+                }
+                
+                this.updateUI();
+                console.log(`Removed object: ${objectId}`);
+            }
+            
+            handleVisibilityUpdate(objectId, visible) {
+                // Update mesh visibility
+                if (this.meshObjects.has(objectId)) {
+                    this.meshObjects.get(objectId).visible = visible;
+                }
+                
+                // Update point cloud visibility
+                if (this.pointCloudObjects.has(objectId)) {
+                    this.pointCloudObjects.get(objectId).visible = visible;
+                }
+                
+                this.updateUI();
+            }
+            
+            handleClearAll() {
+                // Clear all meshes
+                this.meshObjects.forEach((mesh) => {
+                    this.scene.remove(mesh);
+                });
+                this.meshObjects.clear();
+                
+                // Clear all point clouds
+                this.pointCloudObjects.forEach((points) => {
+                    this.scene.remove(points);
+                });
+                this.pointCloudObjects.clear();
+                
+                this.updateUI();
+                console.log('Cleared all objects');
+            }
+            
+            handleSceneInfo(sceneData) {
+                // Handle scene information if needed
+                console.log('Scene info:', sceneData);
+            }
+            
+            updateUI() {
+                // Update counts
+                const meshCount = this.meshObjects.size;
+                const pointCloudCount = this.pointCloudObjects.size;
+                const totalObjects = meshCount + pointCloudCount;
+                
+                document.getElementById('mesh-count').textContent = meshCount;
+                document.getElementById('pointcloud-count').textContent = pointCloudCount;
+                document.getElementById('total-objects').textContent = totalObjects;
+                document.getElementById('objects-count').textContent = totalObjects;
+                
+                // Calculate triangle and point counts
+                let triangleCount = 0;
+                let pointCount = 0;
+                
+                this.meshObjects.forEach((mesh) => {
+                    if (mesh.geometry.index) {
+                        triangleCount += mesh.geometry.index.count / 3;
+                    }
+                });
+                
+                this.pointCloudObjects.forEach((pointGroup) => {
+                    // For sphere-based point clouds, count the children in the group
+                    if (pointGroup.userData.type === 'pointcloud') {
+                        pointCount += pointGroup.children.length;
+                    }
+                });
+                
+                document.getElementById('triangles-count').textContent = Math.floor(triangleCount);
+                document.getElementById('points-count').textContent = pointCount;
+                
+                // Update object lists
+                this.updateMeshList();
+                this.updatePointCloudList();
+            }
+            
+            updateMeshList() {
+                const container = document.getElementById('meshes-list');
+                
+                if (this.meshObjects.size === 0) {
+                    container.innerHTML = '<div class="empty-state">No meshes loaded</div>';
+                    return;
+                }
+                
+                container.innerHTML = '';
+                this.meshObjects.forEach((mesh, id) => {
+                    const triangleCount = mesh.geometry.index ? Math.floor(mesh.geometry.index.count / 3) : 0;
+                    const vertexCount = mesh.geometry.attributes.position.count;
+                    
+                    const item = document.createElement('div');
+                    item.className = 'object-item';
+                    item.innerHTML = `
+                        <div class="mesh-indicator"></div>
+                        <div class="object-info">
+                            <div class="object-name">${id}</div>
+                            <div class="object-details">${vertexCount}v, ${triangleCount}t</div>
+                        </div>
+                        <div class="object-controls">
+                            <button class="btn btn-toggle ${mesh.visible ? '' : 'hidden'}" 
+                                    onclick="toggleObjectVisibility('${id}')">
+                                ${mesh.visible ? '👁️' : '🚫'}
+                            </button>
+                            <button class="btn btn-remove" onclick="removeObject('${id}')">🗑️</button>
+                        </div>
+                    `;
+                    container.appendChild(item);
+                });
+            }
+            
+            updatePointCloudList() {
+                const container = document.getElementById('pointclouds-list');
+                
+                if (this.pointCloudObjects.size === 0) {
+                    container.innerHTML = '<div class="empty-state">No point clouds loaded</div>';
+                    return;
+                }
+                
+                container.innerHTML = '';
+                this.pointCloudObjects.forEach((pointGroup, id) => {
+                    // For sphere-based point clouds, count the children in the group
+                    const pointCount = pointGroup.children.length;
+                    
+                    const item = document.createElement('div');
+                    item.className = 'object-item';
+                    item.innerHTML = `
+                        <div class="pointcloud-indicator"></div>
+                        <div class="object-info">
+                            <div class="object-name">${id}</div>
+                            <div class="object-details">${pointCount} points</div>
+                        </div>
+                        <div class="object-controls">
+                            <button class="btn btn-toggle ${pointGroup.visible ? '' : 'hidden'}" 
+                                    onclick="toggleObjectVisibility('${id}')">
+                                ${pointGroup.visible ? '👁️' : '🚫'}
+                            </button>
+                            <button class="btn btn-remove" onclick="removeObject('${id}')">🗑️</button>
+                        </div>
+                    `;
+                    container.appendChild(item);
+                });
+            }
+            
+            getRandomColor() {
+                return Math.random() * 0xffffff;
+            }
+            
+            sendMessage(message) {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify(message));
+                }
+            }
+            
+            toggleObjectVisibility(objectId) {
+                const mesh = this.meshObjects.get(objectId);
+                const points = this.pointCloudObjects.get(objectId);
+                
+                const newVisibility = mesh ? !mesh.visible : (points ? !points.visible : false);
+                
+                this.sendMessage({
+                    type: 'set_visibility',
+                    object_id: objectId,
+                    visible: newVisibility
+                });
+            }
+            
+            removeObject(objectId) {
+                this.sendMessage({
+                    type: 'remove_object',
+                    object_id: objectId
+                });
+            }
+            
+            clearAll() {
+                this.sendMessage({
+                    type: 'clear_all'
+                });
+            }
+            
+            toggleHelpers() {
+                this.helpersVisible = !this.helpersVisible;
+                this.gridHelper.visible = this.helpersVisible;
+                this.axesHelper.visible = this.helpersVisible;
+                
+                const btn = document.getElementById('helpers-btn');
+                btn.textContent = this.helpersVisible ? 'Hide Grid/Axes' : 'Show Grid/Axes';
+            }
+            
+            toggleCameraMode() {
+                const aspect = (window.innerWidth - 320) / window.innerHeight;
+                const distance = this.camera.position.length();
+                
+                if (this.cameraParams.isPerspective) {
+                    // Switch to orthographic
+                    const size = distance * Math.tan(THREE.MathUtils.degToRad(this.cameraParams.fov * 0.5));
+                    const orthoCamera = new THREE.OrthographicCamera(
+                        -size * aspect, size * aspect,
+                        size, -size,
+                        this.cameraParams.near, this.cameraParams.far
+                    );
+                    
+                    // Copy position and rotation
+                    orthoCamera.position.copy(this.camera.position);
+                    orthoCamera.rotation.copy(this.camera.rotation);
+                    orthoCamera.lookAt(0, 0, 0);
+                    
+                    this.camera = orthoCamera;
+                    this.cameraParams.isPerspective = false;
+                    
+                    document.getElementById('camera-btn').textContent = 'Perspective';
+                } else {
+                    // Switch to perspective
+                    const perspectiveCamera = new THREE.PerspectiveCamera(
+                        this.cameraParams.fov,
+                        aspect,
+                        this.cameraParams.near,
+                        this.cameraParams.far
+                    );
+                    
+                    // Copy position and rotation
+                    perspectiveCamera.position.copy(this.camera.position);
+                    perspectiveCamera.rotation.copy(this.camera.rotation);
+                    perspectiveCamera.lookAt(0, 0, 0);
+                    
+                    this.camera = perspectiveCamera;
+                    this.cameraParams.isPerspective = true;
+                    
+                    document.getElementById('camera-btn').textContent = 'Orthographic';
+                }
+            }
+            
+            resetCamera() {
+                this.camera.position.set(5, 5, 5);
+                this.camera.lookAt(0, 0, 0);
+                
+                // If orthographic, we might need to adjust the zoom
+                if (!this.cameraParams.isPerspective) {
+                    this.camera.zoom = 1;
+                    this.camera.updateProjectionMatrix();
+                }
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                // FPS calculation
+                this.frameCount++;
+                const now = Date.now();
+                if (now - this.lastTime >= 1000) {
+                    const fps = Math.round((this.frameCount * 1000) / (now - this.lastTime));
+                    document.getElementById('fps').textContent = fps;
+                    this.frameCount = 0;
+                    this.lastTime = now;
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+            
+            updateConnectionStatus(connected) {
+                const status = document.getElementById('connection-status');
+                status.textContent = connected ? 'Connected' : 'Disconnected';
+                status.className = `connection-status ${connected ? 'connected' : 'disconnected'}`;
+            }
+            
+            onWindowResize() {
+                const aspect = (window.innerWidth - 320) / window.innerHeight;
+                
+                if (this.cameraParams.isPerspective) {
+                    this.camera.aspect = aspect;
+                } else {
+                    // For orthographic camera, we need to adjust the frustum
+                    const size = this.camera.top;
+                    this.camera.left = -size * aspect;
+                    this.camera.right = size * aspect;
+                }
+                
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth - 320, window.innerHeight);
+            }
+        }
+        
+        // Global functions for UI interaction
+        let visualizer;
+        
+        function toggleObjectVisibility(objectId) {
+            visualizer.toggleObjectVisibility(objectId);
+        }
+        
+        function removeObject(objectId) {
+            visualizer.removeObject(objectId);
+        }
+        
+        function clearAll() {
+            visualizer.clearAll();
+        }
+        
+        function resetCamera() {
+            visualizer.resetCamera();
+        }
+        
+        function toggleHelpers() {
+            visualizer.toggleHelpers();
+        }
+        
+        function toggleCameraMode() {
+            visualizer.toggleCameraMode();
+        }
+        
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            visualizer = new MeshVisualizerClient();
+        });
+    </script>
+</body>
+</html>

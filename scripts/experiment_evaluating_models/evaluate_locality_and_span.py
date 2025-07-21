@@ -10,6 +10,8 @@ import polyscope.imgui as psim
 from scripts.experiment_different_kinds_of_partial_freezing.naive_autosegmentation import *
 import pickle
 from matplotlib import pyplot as plt
+from web_visualizer_server import *
+
 
 def render_pairs_of_meshes(Vs1, Fs1, Vs2, Fs2, image_path, scalar_field_1=None, scalar_field_2=None, offset=0.3):
     """
@@ -105,7 +107,6 @@ def render_pairs_of_meshes(Vs1, Fs1, Vs2, Fs2, image_path, scalar_field_1=None, 
     
     # Clean up
     ps.remove_all_structures()
-
 
 def compute_landmark_groups_of_blendshape(V_0, V_bs, landmark_groups):
     # V_0 = ARkitBS.V
