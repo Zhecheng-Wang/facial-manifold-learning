@@ -435,7 +435,7 @@ async def start_visualizer_server(visualizer, add_test_data=True):
     
     # Keep the server running
     try:
-        await asyncio.Future()  # Run forever
+        await asyncio.Future()  # Run forevers
     except KeyboardInterrupt:
         logger.info("Server stopped")
 

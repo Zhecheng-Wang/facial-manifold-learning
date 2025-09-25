@@ -10,7 +10,6 @@ from speech2face.scripts.id_exp_convert_tests import replace_on_cfg
 import torch 
 import numpy as np
 from tqdm import trange
-import polyscope as ps
 from matplotlib import pyplot as plt
 from web_visualizer_server import *
 import pickle 

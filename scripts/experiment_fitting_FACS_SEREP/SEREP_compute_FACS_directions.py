@@ -163,7 +163,6 @@ class BatchedManualAdam:
                 # Update parameters
                 param.add_(m_hat / (torch.sqrt(v_hat) + self.eps), alpha=-self.lr)
 
-
 class DummyArgs:
     def __init__(self, input, output):
         self.config = "/code/models/id_exp_apply_model/config.yaml"
